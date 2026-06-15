@@ -8,16 +8,16 @@ export function proxy(request: NextRequest) {
   // Protect all /admin routes except /admin/login
   if (path.startsWith('/admin') && path !== '/admin/login') {
     const token = request.cookies.get('slns_admin_token')?.value;
-    
-    if (!token) {
+
+    if (!token || !verifyToken(token)) {
       return NextResponse.redirect(new URL('/admin/login', request.url));
     }
   }
 
-  // Optional: If logged in and trying to access /admin/login, redirect to /admin
+  // If already authenticated, redirect away from login page
   if (path === '/admin/login') {
     const token = request.cookies.get('slns_admin_token')?.value;
-    if (!token || !verifyToken(token)) {
+    if (token && verifyToken(token)) {
       return NextResponse.redirect(new URL('/admin', request.url));
     }
   }
