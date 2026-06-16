@@ -27,7 +27,9 @@ export async function uploadMedia(buffer: Buffer, filename: string, folder = 'sl
     return new Promise((resolve, reject) => {
       let transformation: any[] = [];
       
-      if (watermark) {
+      const isImage = filename.match(/\.(jpe?g|png|webp|gif|svg|bmp)$/i);
+      
+      if (watermark && isImage) {
         if (watermark.type === 'logo') {
           transformation.push({ overlay: 'slns_logo', gravity: watermark.position, opacity: 80, width: 200, y: 20, x: 20 });
         } else {

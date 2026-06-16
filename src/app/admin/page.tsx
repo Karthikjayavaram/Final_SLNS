@@ -370,13 +370,13 @@ export default function AdminDashboard() {
                     <label className="relative cursor-pointer w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-surface/50 hover:bg-white/5 transition-colors">
                       <ImageIcon className="w-5 h-5 text-gold-400" />
                       <span className="text-sm">Select Photos & Videos</span>
-                      <input type="file" accept="image/*,video/*" multiple onChange={handleFilesSelected} className="hidden" />
+                      <input type="file" multiple onChange={handleFilesSelected} className="hidden" />
                     </label>
                     
                     <label className="relative cursor-pointer w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-surface/50 hover:bg-white/5 transition-colors">
                       <Plus className="w-5 h-5 text-gold-400" />
                       <span className="text-sm">Select Entire Folder</span>
-                      <input type="file" accept="image/*,video/*" {...{webkitdirectory: "true"}} onChange={handleFilesSelected} className="hidden" />
+                      <input type="file" {...{webkitdirectory: "true"}} onChange={handleFilesSelected} className="hidden" />
                     </label>
                   </div>
                 </div>
@@ -438,11 +438,12 @@ export default function AdminDashboard() {
 
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 p-4 rounded-2xl bg-surface/50 border border-white/5">
-        <div className="flex items-center gap-4 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
           {/* Multi-select actions */}
           {selectedIds.length > 0 ? (
-            <div className="flex items-center gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2 animate-in fade-in flex-wrap">
               <span className="text-xs text-gold-400 font-bold px-2">{selectedIds.length} Selected</span>
+              <button onClick={() => setSelectedIds(displayedProjects.map(p => p._id))} className="text-xs btn-outline-gold px-2 py-1.5 rounded-lg whitespace-nowrap">Select All</button>
               <button onClick={handleBulkDelete} className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40"><Trash2 className="w-4 h-4"/></button>
               <select onChange={(e) => { if(e.target.value) handleBulkUpdate({ category: e.target.value })}} className="px-3 py-1.5 rounded-lg border border-white/10 bg-black text-xs text-foreground [&>option]:bg-black [&>option]:text-white">
                 <option value="">Move to...</option>
@@ -452,6 +453,7 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <>
+              <button onClick={() => setSelectedIds(displayedProjects.map(p => p._id))} className="text-xs btn-outline-gold px-3 py-2 rounded-xl whitespace-nowrap">Select All</button>
               <div className="relative w-full md:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
                 <input type="text" placeholder="Search categories..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 rounded-xl border border-white/10 bg-black text-sm" />

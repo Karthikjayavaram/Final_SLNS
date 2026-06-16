@@ -62,17 +62,43 @@ export default function HeroSection() {
       {/* Content */}
       <div className="absolute inset-0 flex flex-col justify-center items-center text-center px-4 sm:px-6 lg:px-8 z-10">
         <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
-          {/* Badge */}
+          {/* Big Logo / Brand Name */}
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.8 }}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-gold-400/20 bg-gold-400/5"
+            initial={{ opacity: 0, scale: 0.8, y: -30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{
+              type: "spring",
+              stiffness: 100,
+              damping: 20,
+              delay: 0.3,
+              duration: 1
+            }}
+            className="mb-6 flex flex-col items-center justify-center gap-2"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-gold-400 animate-pulse" />
-            <span className="font-sans text-[10px] sm:text-xs font-bold tracking-[0.25em] uppercase text-gold-400/80">
-              SLNS Since 1986
-            </span>
+            <div className="relative inline-block">
+              <h2 className="font-serif text-5xl sm:text-6xl md:text-8xl font-black tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-gold-300 via-gold-400 to-gold-600 drop-shadow-[0_0_15px_rgba(170,124,17,0.5)]">
+                SLNS
+              </h2>
+              <motion.div 
+                className="absolute -top-4 -right-6 text-gold-300"
+                animate={{ rotate: [0, 15, -15, 0] }}
+                transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
+              >
+                ✨
+              </motion.div>
+            </div>
+            <motion.div 
+              initial={{ opacity: 0, letterSpacing: "0em" }}
+              animate={{ opacity: 1, letterSpacing: "0.5em" }}
+              transition={{ delay: 0.8, duration: 1.5, ease: "easeOut" }}
+              className="flex items-center gap-4"
+            >
+              <div className="h-[1px] w-12 sm:w-20 bg-gradient-to-r from-transparent to-gold-400/50" />
+              <span className="font-sans text-sm sm:text-base md:text-xl font-bold tracking-[0.5em] uppercase text-gold-400/90 whitespace-nowrap">
+                Since 1984
+              </span>
+              <div className="h-[1px] w-12 sm:w-20 bg-gradient-to-l from-transparent to-gold-400/50" />
+            </motion.div>
           </motion.div>
 
           {/* Heading */}

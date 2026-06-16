@@ -71,66 +71,102 @@ export default async function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             {/* Images */}
-            <ScrollReveal direction="left">
-              <div className="relative flex justify-center items-center">
-                <div className="grid grid-cols-2 gap-4 max-w-md w-full">
-                  <div className="relative h-64 sm:h-72 rounded-2xl overflow-hidden border border-white/5 transform -rotate-2">
+            <ScrollReveal direction="left" duration={1.2}>
+              <div className="relative flex justify-center items-center group">
+                {/* Decorative background glow */}
+                <div className="absolute inset-0 bg-gold-400/10 blur-3xl rounded-full scale-75 group-hover:scale-100 transition-transform duration-1000" />
+                
+                <div className="relative w-full max-w-md aspect-[4/5] z-10">
+                  {/* Main Large Image */}
+                  <div className="absolute top-0 right-0 w-[85%] h-[80%] rounded-3xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:-translate-y-2 transition-transform duration-700 z-10">
                     <Image
-                      src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=400"
+                      src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=600"
                       alt="Wedding floral arch"
                       fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 50vw, 200px"
+                      className="object-cover transition-transform duration-1000 group-hover:scale-110"
+                      sizes="(max-width: 768px) 70vw, 300px"
                     />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   </div>
-                  <div className="relative h-64 sm:h-72 rounded-2xl overflow-hidden border border-white/5 transform rotate-2 translate-y-8">
+                  
+                  {/* Smaller Overlapping Image */}
+                  <div className="absolute bottom-0 left-0 w-[60%] h-[50%] rounded-2xl overflow-hidden border-4 border-background shadow-[0_20px_40px_rgba(0,0,0,0.6)] group-hover:translate-x-2 group-hover:-translate-y-2 transition-transform duration-700 z-20">
                     <Image
                       src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=400"
                       alt="Dining table setting"
                       fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 50vw, 200px"
+                      className="object-cover transition-transform duration-1000 group-hover:scale-110"
+                      sizes="(max-width: 768px) 50vw, 250px"
                     />
+                  </div>
+                  
+                  {/* Gold Accent Frame */}
+                  <div className="absolute -inset-4 border border-gold-400/20 rounded-3xl z-0 scale-95 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-700" />
+                </div>
+                
+                {/* Floating badge */}
+                <div className="absolute -bottom-6 -left-6 sm:bottom-4 sm:-left-12 bg-surface border border-gold-400/30 p-4 sm:p-6 rounded-2xl shadow-[0_0_30px_rgba(170,124,17,0.15)] z-20 animate-bounce-slow">
+                  <div className="text-center">
+                    <span className="block text-3xl sm:text-4xl font-serif text-gold-400 font-bold">40+</span>
+                    <span className="block text-[10px] sm:text-xs font-sans uppercase tracking-[0.2em] text-foreground/70 mt-1">Years of<br/>Excellence</span>
                   </div>
                 </div>
               </div>
             </ScrollReveal>
 
             {/* Text */}
-            <ScrollReveal direction="right" delay={0.2}>
-              <div className="space-y-6">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-gold-400/20 bg-gold-400/5">
-                  <span className="font-sans text-[10px] font-bold tracking-[0.25em] uppercase text-gold-400/80">
+            <div className="space-y-8">
+              <ScrollReveal direction="up" delay={0.2}>
+                <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full border border-gold-400/30 bg-gold-400/5 hover:bg-gold-400/10 transition-colors cursor-default">
+                  <span className="w-2 h-2 rounded-full bg-gold-400 animate-pulse" />
+                  <span className="font-sans text-[11px] font-bold tracking-[0.3em] uppercase text-gold-400">
                     Our Story
                   </span>
                 </div>
-                <h2 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-bold tracking-wide leading-tight text-foreground">
+              </ScrollReveal>
+
+              <ScrollReveal direction="up" delay={0.3}>
+                <h2 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-bold tracking-wide leading-[1.1] text-foreground">
                   Crafting Grand Decor For Your{' '}
-                  <span className="gold-text-gradient">Precious Moments</span>
+                  <span className="relative inline-block mt-2">
+                    <span className="relative z-10 gold-text-gradient drop-shadow-sm">Precious Moments</span>
+                    <span className="absolute bottom-0 left-0 w-full h-[3px] bg-gold-400/50 rounded-full blur-[1px]" />
+                  </span>
                 </h2>
-                <p className="text-foreground/50 leading-relaxed font-light text-sm sm:text-base">
-                  At <strong className="text-gold-400">SLNS Events</strong>, we
-                  believe every family milestone is a canvas for beauty. Our
-                  family-run event decoration business has styled elegant stages,
-                  romantic wedding mandaps, vibrant birthday themes, and stunning
-                  balloon arrangements.
-                </p>
-                <p className="text-foreground/50 leading-relaxed font-light text-sm sm:text-base">
-                  We handle everything from on-site floral styling and drapery to
-                  lighting setups and dismantling — leaving you free to enjoy your
-                  celebration with peace of mind.
-                </p>
-                <div className="pt-2">
+              </ScrollReveal>
+
+              <ScrollReveal direction="up" delay={0.4}>
+                <div className="relative pl-6 sm:pl-8 border-l-2 border-gold-400/30 space-y-6">
+                  <p className="text-foreground/70 leading-relaxed font-light text-base sm:text-lg">
+                    At <strong className="text-gold-400 font-medium">SLNS Events</strong>, we
+                    believe every family milestone is a canvas for beauty. Our
+                    family-run event decoration business has styled elegant stages,
+                    romantic wedding mandaps, vibrant birthday themes, and stunning
+                    balloon arrangements.
+                  </p>
+                  <p className="text-foreground/70 leading-relaxed font-light text-base sm:text-lg">
+                    We handle everything from on-site floral styling and drapery to
+                    lighting setups and dismantling — leaving you free to enjoy your
+                    celebration with absolute peace of mind.
+                  </p>
+                </div>
+              </ScrollReveal>
+
+              <ScrollReveal direction="up" delay={0.5}>
+                <div className="pt-4 flex items-center gap-6">
                   <Link
                     href="/contact"
-                    className="inline-flex items-center gap-2 text-gold-400 hover:text-gold-300 font-sans text-sm font-bold uppercase tracking-wider transition-colors group"
+                    className="relative inline-flex items-center justify-center gap-2 px-8 py-4 bg-gold-400 text-black rounded-full font-sans text-sm font-bold uppercase tracking-wider overflow-hidden group shadow-[0_0_20px_rgba(170,124,17,0.3)] hover:shadow-[0_0_30px_rgba(170,124,17,0.5)] transition-shadow duration-300"
                   >
-                    Contact our designers
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    <span className="relative z-10 flex items-center gap-2">
+                      Contact our designers
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </span>
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
                   </Link>
                 </div>
-              </div>
-            </ScrollReveal>
+              </ScrollReveal>
+            </div>
           </div>
         </div>
       </section>
