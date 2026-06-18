@@ -802,6 +802,7 @@ export default function AdminDashboard() {
                   isModal={false}
                   onSave={async (blob) => {
                     // Save new edited image
+                    if (!blob) return;
                     setUploading(true);
                     try {
                       const formData = new FormData();
