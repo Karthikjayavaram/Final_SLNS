@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
     await dbConnect();
     const url = new URL(req.url);
     const limit = url.searchParams.get('limit');
+    const page = url.searchParams.get('page');
     const category = url.searchParams.get('category');
     const sort = url.searchParams.get('sort'); // 'newest' | 'oldest'
 
@@ -31,6 +32,11 @@ export async function GET(req: NextRequest) {
     } else {
       // Newest first (default)
       query = query.sort({ createdAt: -1, uploadDate: -1 });
+    }
+
+    if (page && limit) {
+      const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+      query = query.skip(skip);
     }
 
     if (limit) {
