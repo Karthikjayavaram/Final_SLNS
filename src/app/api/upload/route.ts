@@ -19,10 +19,28 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    const watermarkStr = formData.get('watermark') as string;
+    const skipWatermark = formData.get('skipWatermark') === 'true';
+    const customWatermarkStr = formData.get('customWatermark') as string | null;
+    
     let watermark;
-    if (watermarkStr) {
-      try { watermark = JSON.parse(watermarkStr); } catch (e) {}
+    if (skipWatermark) {
+      watermark = undefined;
+    } else if (customWatermarkStr) {
+      try {
+        watermark = JSON.parse(customWatermarkStr);
+      } catch (e) {
+        console.error('Failed to parse custom watermark', e);
+      }
+    }
+    
+    if (watermark === undefined && !skipWatermark) {
+      // Default watermark applied to all uploads automatically
+      watermark = {
+        type: 'text',
+        text: 'SLNS 9480038144',
+        position: 'center',
+        color: 'white'
+      };
     }
 
     const url = await uploadMedia(buffer, file.name, 'slns_portfolio', watermark);

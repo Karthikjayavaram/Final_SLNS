@@ -6,11 +6,12 @@ import {
   MapPin, Phone, Mail, Clock, MessageCircle, Navigation 
 } from 'lucide-react';
 import ScrollReveal from '@/components/ScrollReveal';
+import SignatureStamp from '@/components/SignatureStamp';
 
 export default function ContactPage() {
   const businessInfo = {
     name: "SLNS",
-    subtitle: "Since 1986",
+    subtitle: "Since 1984",
     phones: ["+91 94800 38144"],
     email: "contact@slns.com", // Replace with real if available
     address: "Bangalore, Karnataka, India", // Replace with exact address if available
@@ -82,7 +83,13 @@ export default function ContactPage() {
       {/* Hero Section */}
       <section className="pt-32 pb-16 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(170,124,17,0.08)_0%,transparent_70%)]" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+        
+        {/* Floating Stamp */}
+        <div className="absolute top-24 right-4 sm:top-32 sm:right-10 lg:right-20 pointer-events-none opacity-30 sm:opacity-40 hover:opacity-100 transition-opacity duration-700 z-20">
+          <SignatureStamp className="w-24 h-24 sm:w-32 sm:h-32" />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-30">
           <ScrollReveal>
             <span className="font-sans text-xs font-bold tracking-[0.3em] text-gold-400/80 uppercase">
               Get In Touch

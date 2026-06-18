@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Briefcase, Phone } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import SignatureStamp from '@/components/SignatureStamp';
 
 const GoldParticles = dynamic(() => import('@/components/three/GoldParticles'), {
   ssr: false,
@@ -13,37 +14,7 @@ const GoldParticles = dynamic(() => import('@/components/three/GoldParticles'), 
   ),
 });
 
-const slides = [
-  {
-    title: 'We Design Your',
-    highlight: 'Beautiful Moments',
-    tagline:
-      'Luxury wedding stages & floral mandaps crafted with royal grandeur and modern sophistication.',
-  },
-  {
-    title: 'Celebrate in',
-    highlight: 'Magical Backdrops',
-    tagline:
-      'Stunning stage setups and theme decorations tailored specifically for your family milestones.',
-  },
-  {
-    title: 'Sophisticated',
-    highlight: 'Floral Artistry',
-    tagline:
-      'Meticulously planned pathways, entrance arches, and canopy setups that leave guests in awe.',
-  },
-];
-
 export default function HeroSection() {
-  const [current, setCurrent] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrent((prev) => (prev + 1) % slides.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, []);
-
   return (
     <section className="relative h-[100svh] w-full overflow-hidden bg-black">
       {/* Three.js Particles Background */}
@@ -61,83 +32,119 @@ export default function HeroSection() {
 
       {/* Content */}
       <div className="absolute inset-0 flex flex-col justify-center items-center text-center px-4 sm:px-6 lg:px-8 z-10">
+        
+        {/* Floating Stamp */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 1, duration: 1.5 }}
+          className="absolute top-24 right-4 sm:top-32 sm:right-10 lg:right-20 pointer-events-none opacity-30 sm:opacity-40 hover:opacity-100 transition-opacity duration-700 z-50"
+        >
+          <SignatureStamp className="w-24 h-24 sm:w-32 sm:h-32" />
+        </motion.div>
+
         <div className="max-w-4xl mx-auto space-y-6 sm:space-y-8">
           {/* Big Logo / Brand Name */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: -30 }}
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{
               type: "spring",
-              stiffness: 100,
+              stiffness: 70,
               damping: 20,
-              delay: 0.3,
-              duration: 1
+              delay: 0.2,
+              duration: 1.5
             }}
-            className="mb-6 flex flex-col items-center justify-center gap-2"
+            className="mb-8 mt-24 sm:mt-32 flex flex-col items-center justify-center gap-4 relative"
           >
-            <div className="relative inline-block">
-              <h2 className="font-serif text-5xl sm:text-6xl md:text-8xl font-black tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-gold-300 via-gold-400 to-gold-600 drop-shadow-[0_0_15px_rgba(170,124,17,0.5)]">
-                SLNS
-              </h2>
+            {/* Cinematic Glow Behind Text */}
+            <div className="absolute inset-0 bg-gold-400/10 blur-[100px] rounded-full scale-150 pointer-events-none" />
+            
+            <div className="relative inline-block text-center z-10">
+              <div className="font-serif text-[5rem] sm:text-8xl md:text-[8rem] lg:text-[10rem] leading-none font-black tracking-wider uppercase drop-shadow-[0_0_30px_rgba(170,124,17,0.8)]">
+                {"SLNS".split('').map((char, index) => (
+                  <motion.span
+                    key={index}
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ 
+                      opacity: [0, 1, 1, 0, 0], 
+                      y: [40, 0, 0, -40, 40] 
+                    }}
+                    transition={{ 
+                      duration: 6, 
+                      repeat: Infinity, 
+                      delay: index * 0.15, 
+                      times: [0, 0.15, 0.8, 0.95, 1],
+                      ease: "easeInOut" 
+                    }}
+                    className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-[#FFF5D6] via-gold-400 to-orange-500 bg-[length:200%_auto] bg-left"
+                    style={{ backgroundPosition: `${index * 25}% 50%` }}
+                  >
+                    {char}
+                  </motion.span>
+                ))}
+              </div>
+              <div className="font-serif text-5xl sm:text-6xl md:text-[5rem] lg:text-[7rem] leading-tight font-black tracking-widest uppercase drop-shadow-[0_0_20px_rgba(170,124,17,0.6)]">
+                {"SIRUGUPPA".split('').map((char, index) => (
+                  <motion.span
+                    key={index}
+                    initial={{ opacity: 0, y: 40 }}
+                    animate={{ 
+                      opacity: [0, 1, 1, 0, 0], 
+                      y: [40, 0, 0, -40, 40] 
+                    }}
+                    transition={{ 
+                      duration: 6, 
+                      repeat: Infinity, 
+                      delay: 0.6 + index * 0.1, 
+                      times: [0, 0.15, 0.8, 0.95, 1],
+                      ease: "easeInOut" 
+                    }}
+                    className="inline-block text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-gold-400 to-[#FFF5D6] bg-[length:200%_auto] bg-left"
+                    style={{ backgroundPosition: `${index * 12}% 50%` }}
+                  >
+                    {char}
+                  </motion.span>
+                ))}
+              </div>
+              
+              {/* Golden particle sparkles */}
               <motion.div 
-                className="absolute -top-4 -right-6 text-gold-300"
-                animate={{ rotate: [0, 15, -15, 0] }}
-                transition={{ repeat: Infinity, duration: 5, ease: "easeInOut" }}
+                className="absolute -top-8 -right-8 text-gold-300 drop-shadow-[0_0_15px_rgba(255,255,255,0.8)] text-2xl sm:text-4xl"
+                animate={{ rotate: [0, 15, -15, 0], scale: [1, 1.2, 1] }}
+                transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+              >
+                ✨
+              </motion.div>
+              <motion.div 
+                className="absolute bottom-10 -left-10 text-gold-400 drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] text-xl sm:text-3xl opacity-70"
+                animate={{ rotate: [0, -15, 15, 0], scale: [1, 1.3, 1] }}
+                transition={{ repeat: Infinity, duration: 5, ease: "easeInOut", delay: 1 }}
               >
                 ✨
               </motion.div>
             </div>
+
             <motion.div 
               initial={{ opacity: 0, letterSpacing: "0em" }}
-              animate={{ opacity: 1, letterSpacing: "0.5em" }}
-              transition={{ delay: 0.8, duration: 1.5, ease: "easeOut" }}
-              className="flex items-center gap-4"
+              animate={{ opacity: 1, letterSpacing: "0.6em" }}
+              transition={{ delay: 1.2, duration: 2, ease: "easeOut" }}
+              className="flex items-center gap-4 mt-2"
             >
-              <div className="h-[1px] w-12 sm:w-20 bg-gradient-to-r from-transparent to-gold-400/50" />
-              <span className="font-sans text-sm sm:text-base md:text-xl font-bold tracking-[0.5em] uppercase text-gold-400/90 whitespace-nowrap">
+              <div className="h-[1px] w-16 sm:w-32 bg-gradient-to-r from-transparent via-gold-400/80 to-transparent" />
+              <span className="font-sans text-sm sm:text-lg md:text-2xl font-bold tracking-[0.6em] uppercase text-gold-200 whitespace-nowrap drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
                 Since 1984
               </span>
-              <div className="h-[1px] w-12 sm:w-20 bg-gradient-to-l from-transparent to-gold-400/50" />
+              <div className="h-[1px] w-16 sm:w-32 bg-gradient-to-r from-transparent via-gold-400/80 to-transparent" />
             </motion.div>
           </motion.div>
-
-          {/* Heading */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={current}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.7 }}
-            >
-              <h1 className="font-serif text-4xl sm:text-6xl lg:text-7xl font-bold tracking-wide leading-[1.1]">
-                <span className="text-foreground">{slides[current].title}</span>
-                <br />
-                <span className="gold-shimmer">{slides[current].highlight}</span>
-              </h1>
-            </motion.div>
-          </AnimatePresence>
-
-          {/* Tagline */}
-          <AnimatePresence mode="wait">
-            <motion.p
-              key={`tag-${current}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="max-w-xl mx-auto font-sans text-sm sm:text-base lg:text-lg text-foreground/50 font-light leading-relaxed tracking-wide"
-            >
-              {slides[current].tagline}
-            </motion.p>
-          </AnimatePresence>
 
           {/* CTAs */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
-            className="pt-4 flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4"
+            transition={{ delay: 1.5, duration: 0.8 }}
+            className="pt-6 flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4"
           >
             <a
               href="tel:+919480038144"
@@ -155,22 +162,6 @@ export default function HeroSection() {
             </Link>
           </motion.div>
         </div>
-      </div>
-
-      {/* Slide Indicators */}
-      <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-3 z-10">
-        {slides.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => setCurrent(index)}
-            className={`h-1.5 rounded-full transition-all duration-500 ${
-              current === index
-                ? 'bg-gold-400 w-8'
-                : 'bg-white/20 w-4 hover:bg-white/40'
-            }`}
-            aria-label={`Go to slide ${index + 1}`}
-          />
-        ))}
       </div>
 
       {/* Scroll indicator */}

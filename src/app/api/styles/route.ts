@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import EventStyle from '@/models/EventStyle';
+import Project from '@/models/Project';
 import { getAdminFromRequest } from '@/lib/auth';
+import { deleteMedia } from '@/lib/cloudinary';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,7 +61,23 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Style ID is required' }, { status: 400 });
     }
 
+    const style = await EventStyle.findById(id);
+    if (!style) {
+      return NextResponse.json({ error: 'Style not found' }, { status: 404 });
+    }
+
+    // Delete all projects and their media in this category
+    const projects = await Project.find({ category: style.name });
+    for (const project of projects) {
+      for (const mediaUrl of project.mediaUrls) {
+        await deleteMedia(mediaUrl);
+      }
+    }
+    await Project.deleteMany({ category: style.name });
+
+    // Finally delete the category
     await EventStyle.findByIdAndDelete(id);
+
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     console.error('Failed to delete style:', error);

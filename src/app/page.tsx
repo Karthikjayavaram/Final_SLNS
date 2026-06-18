@@ -6,6 +6,7 @@ import HeroSection from '@/components/HeroSection';
 import StatsCounter from '@/components/StatsCounter';
 import TestimonialSlider from '@/components/TestimonialSlider';
 import ScrollReveal from '@/components/ScrollReveal';
+import SignatureStamp from '@/components/SignatureStamp';
 
 import dbConnect from '@/lib/db';
 import Project from '@/models/Project';
@@ -76,39 +77,36 @@ export default async function HomePage() {
                 {/* Decorative background glow */}
                 <div className="absolute inset-0 bg-gold-400/10 blur-3xl rounded-full scale-75 group-hover:scale-100 transition-transform duration-1000" />
                 
-                <div className="relative w-full max-w-md aspect-[4/5] z-10">
-                  {/* Main Large Image */}
-                  <div className="absolute top-0 right-0 w-[85%] h-[80%] rounded-3xl overflow-hidden border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] group-hover:-translate-y-2 transition-transform duration-700 z-10">
+                <div className="relative w-full max-w-lg mx-auto h-[500px] sm:h-[600px] flex items-center justify-center">
+                  {/* Image 1: Top Left */}
+                  <div className="absolute top-0 left-0 w-3/5 h-[70%] rounded-2xl overflow-hidden border border-gold-400/20 shadow-2xl z-10 group-hover:scale-[1.02] transition-transform duration-700 group-hover:-translate-y-2">
                     <Image
                       src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=600"
                       alt="Wedding floral arch"
                       fill
                       className="object-cover transition-transform duration-1000 group-hover:scale-110"
-                      sizes="(max-width: 768px) 70vw, 300px"
+                      sizes="(max-width: 768px) 60vw, 300px"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   </div>
                   
-                  {/* Smaller Overlapping Image */}
-                  <div className="absolute bottom-0 left-0 w-[60%] h-[50%] rounded-2xl overflow-hidden border-4 border-background shadow-[0_20px_40px_rgba(0,0,0,0.6)] group-hover:translate-x-2 group-hover:-translate-y-2 transition-transform duration-700 z-20">
+                  {/* Image 2: Bottom Right */}
+                  <div className="absolute bottom-0 right-0 w-[55%] h-[65%] rounded-2xl overflow-hidden border border-gold-400/20 shadow-2xl z-20 group-hover:scale-[1.02] transition-transform duration-700 group-hover:translate-y-2">
                     <Image
-                      src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=400"
+                      src="https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=600"
                       alt="Dining table setting"
                       fill
                       className="object-cover transition-transform duration-1000 group-hover:scale-110"
-                      sizes="(max-width: 768px) 50vw, 250px"
+                      sizes="(max-width: 768px) 50vw, 300px"
                     />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   </div>
-                  
-                  {/* Gold Accent Frame */}
-                  <div className="absolute -inset-4 border border-gold-400/20 rounded-3xl z-0 scale-95 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all duration-700" />
-                </div>
-                
-                {/* Floating badge */}
-                <div className="absolute -bottom-6 -left-6 sm:bottom-4 sm:-left-12 bg-surface border border-gold-400/30 p-4 sm:p-6 rounded-2xl shadow-[0_0_30px_rgba(170,124,17,0.15)] z-20 animate-bounce-slow">
-                  <div className="text-center">
-                    <span className="block text-3xl sm:text-4xl font-serif text-gold-400 font-bold">40+</span>
-                    <span className="block text-[10px] sm:text-xs font-sans uppercase tracking-[0.2em] text-foreground/70 mt-1">Years of<br/>Excellence</span>
+
+                  {/* Stamp Graphic */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] pointer-events-none">
+                    <div className="bg-[#0A0A0A] rounded-full p-2 border border-gold-400/10">
+                      <SignatureStamp className="w-24 h-24 sm:w-32 sm:h-32" />
+                    </div>
                   </div>
                 </div>
               </div>

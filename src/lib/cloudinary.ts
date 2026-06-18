@@ -20,6 +20,8 @@ export type WatermarkOptions = {
   text: string;
   position: string;
   color: string;
+  size?: number;
+  opacity?: number;
 };
 
 export async function uploadMedia(buffer: Buffer, filename: string, folder = 'slns_portfolio', watermark?: WatermarkOptions): Promise<string> {
@@ -27,21 +29,22 @@ export async function uploadMedia(buffer: Buffer, filename: string, folder = 'sl
     return new Promise((resolve, reject) => {
       let transformation: any[] = [];
       
-      const isImage = filename.match(/\.(jpe?g|png|webp|gif|svg|bmp)$/i);
+      const isVideo = filename.match(/\.(mp4|webm|ogg|mov|avi|mkv)$/i);
       
-      if (watermark && isImage) {
+      if (watermark) {
         if (watermark.type === 'logo') {
           transformation.push({ overlay: 'slns_logo', gravity: watermark.position, opacity: 80, width: 200, y: 20, x: 20 });
         } else {
           // encode uri component for text is required by cloudinary for text overlays
           const encodedText = encodeURIComponent(watermark.text || 'SLNS');
+          const isCenter = watermark.position === 'center';
+          const opacityVal = watermark.opacity ? Math.round(watermark.opacity * 100) : 70;
           transformation.push({ 
-            overlay: { font_family: "Arial", font_size: 60, font_weight: "bold", text: encodedText }, 
-            color: watermark.color === 'gold' ? '#AA7C11' : watermark.color, 
+            overlay: { font_family: "Arial", font_size: watermark.size || 30, font_weight: "bold", text: encodedText }, 
+            color: watermark.color === 'gold' ? '#AA7C11' : (watermark.color || 'white'), 
             gravity: watermark.position, 
-            opacity: 70,
-            y: 30,
-            x: 30
+            opacity: opacityVal,
+            ...(isCenter ? {} : { y: 30, x: 30 })
           });
         }
       }

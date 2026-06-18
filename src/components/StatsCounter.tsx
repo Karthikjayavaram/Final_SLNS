@@ -18,7 +18,7 @@ export default function StatsCounter() {
         >
           <div className="inline-block px-6 py-2 rounded-full border border-gold-400/20 bg-gold-400/5 mb-4">
             <span className="font-sans text-xs sm:text-sm font-bold tracking-[0.3em] gold-text-gradient uppercase">
-              1986 → Present
+              1984 → Present
             </span>
           </div>
           

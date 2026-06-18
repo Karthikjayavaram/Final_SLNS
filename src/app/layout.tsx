@@ -3,6 +3,7 @@ import { Playfair_Display, Inter } from 'next/font/google';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import StickyContact from '@/components/StickyContact';
+import ContentProtection from '@/components/ContentProtection';
 import './globals.css';
 
 const playfair = Playfair_Display({
@@ -57,7 +58,8 @@ export default function RootLayout({
       lang="en"
       className={`${playfair.variable} ${inter.variable} scroll-smooth`}
     >
-      <body className="antialiased min-h-screen flex flex-col bg-background text-foreground font-sans">
+      <body className="antialiased min-h-screen flex flex-col bg-background text-foreground font-sans protected-media">
+        <ContentProtection />
         <Navbar />
         <main className="flex-grow pt-0 pb-20 md:pb-0">{children}</main>
         <Footer />

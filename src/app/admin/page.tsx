@@ -3,12 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Plus, Minus, Trash2, Image as ImageIcon, Loader2, LogOut, 
-  Search, Filter, X, Edit, Eye, EyeOff, Star, Save, CheckSquare, Square, 
-  Upload, Crop
+  Upload, Trash2, X, Plus, ImageIcon, CheckSquare, Search, Filter, LogOut, Loader2, Crop, Minus, AlertCircle, Edit, Eye, EyeOff, Star, Save, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ImageEditor from './ImageEditor';
+import ErrorModal from '@/components/ErrorModal';
 
 type Project = {
   _id: string;
@@ -27,6 +26,7 @@ type StagedFile = {
   originalFile: File;
   objectUrl: string;
   editedBlob?: Blob;
+  watermarkOptions?: any;
 };
 
 export default function AdminDashboard() {
@@ -35,6 +35,12 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadCurrent, setUploadCurrent] = useState(0);
+  const [uploadTotal, setUploadTotal] = useState(0);
+  const [uploadSuccess, setUploadSuccess] = useState(0);
+  const [uploadFail, setUploadFail] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
   const router = useRouter();
 
   // Search & Filter
@@ -54,7 +60,13 @@ export default function AdminDashboard() {
   // Modals
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [previewProject, setPreviewProject] = useState<Project | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<{isOpen: boolean, message: string, onConfirm: () => void} | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    message: string;
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title?: string; message: string; details?: string } | null>(null);
 
   useEffect(() => {
     fetchCategories();
@@ -63,7 +75,7 @@ export default function AdminDashboard() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/styles');
+      const res = await fetch('/api/styles', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setCategories(data);
@@ -118,10 +130,27 @@ export default function AdminDashboard() {
     if (e) e.stopPropagation();
     setConfirmDialog({
       isOpen: true,
-      message: 'Delete this category? Photos will remain but their category tag might disappear.',
+      message: 'Delete this category? ALL photos and videos inside this category will also be permanently deleted.',
       onConfirm: async () => {
+        const categoryName = categories.find(c => c._id === id)?.name;
         await fetch(`/api/styles?id=${id}`, { method: 'DELETE' });
+        
+        // Optimistically remove category
+        setCategories(prev => {
+          const updated = prev.filter(c => c._id !== id);
+          if (uploadCategory === categoryName) {
+            setUploadCategory(updated.length > 0 ? updated[0].name : '');
+          }
+          return updated;
+        });
+        
+        // Optimistically remove all projects in this category
+        if (categoryName) {
+          setProjects(prev => prev.filter(p => p.category !== categoryName));
+        }
+
         fetchCategories();
+        fetchProjects(); // refresh projects to ensure accurate state
         setConfirmDialog(null);
       }
     });
@@ -138,11 +167,15 @@ export default function AdminDashboard() {
       message: `Delete ${selectedIds.length} projects?`,
       onConfirm: async () => {
         try {
-          await fetch('/api/projects/bulk', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'delete', ids: selectedIds }),
-          });
+          const validIds = selectedIds.filter(id => !id.startsWith('temp-'));
+          if (validIds.length > 0) {
+            await fetch('/api/projects/bulk', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'delete', ids: validIds }),
+            });
+          }
+          setProjects(prev => prev.filter(p => !selectedIds.includes(p._id)));
           setSelectedIds([]);
           fetchProjects();
         } catch (e) {
@@ -173,7 +206,10 @@ export default function AdminDashboard() {
       message: 'Are you sure you want to delete this media?',
       onConfirm: async () => {
         try {
-          await fetch(`/api/projects?id=${id}`, { method: 'DELETE' });
+          setProjects(prev => prev.filter(p => p._id !== id));
+          if (!id.startsWith('temp-')) {
+            await fetch(`/api/projects?id=${id}`, { method: 'DELETE' });
+          }
           fetchProjects();
         } catch (error) {
           console.error('Delete failed', error);
@@ -188,13 +224,24 @@ export default function AdminDashboard() {
     if (!e.target.files) return;
     const files = Array.from(e.target.files);
     
-    const newStaged = files.map(f => ({
-      id: Math.random().toString(36).substr(2, 9),
-      originalFile: f,
-      objectUrl: URL.createObjectURL(f)
-    }));
+    setStagingFiles(prev => {
+      // Filter out files that already exist (same name and size)
+      const newFiles = files.filter(f => !prev.some(p => p.originalFile.name === f.name && p.originalFile.size === f.size));
+      
+      if (newFiles.length === 0) {
+        // Optional: all files were duplicates
+        return prev;
+      }
+
+      const newStaged = newFiles.map(f => ({
+        id: Math.random().toString(36).substr(2, 9),
+        originalFile: f,
+        objectUrl: URL.createObjectURL(f)
+      }));
+      
+      return [...prev, ...newStaged];
+    });
     
-    setStagingFiles(prev => [...prev, ...newStaged]);
     e.target.value = ''; // Reset input
   };
 
@@ -202,12 +249,16 @@ export default function AdminDashboard() {
     setStagingFiles(prev => prev.filter(f => f.id !== id));
   };
 
-  const saveEditedStagedFile = (blob: Blob) => {
+  const saveEditedStagedFile = (blob: Blob | null, watermarkOpts?: any) => {
     if (!editingStagedFile) return;
     setStagingFiles(prev => prev.map(f => {
       if (f.id === editingStagedFile.id) {
-        if (f.editedBlob) URL.revokeObjectURL(f.objectUrl); // cleanup previous edit if any
-        return { ...f, objectUrl: URL.createObjectURL(blob), editedBlob: blob };
+        if (blob) {
+          if (f.editedBlob) URL.revokeObjectURL(f.objectUrl); // cleanup previous edit if any
+          return { ...f, objectUrl: URL.createObjectURL(blob), editedBlob: blob };
+        } else if (watermarkOpts) {
+          return { ...f, watermarkOptions: { ...watermarkOpts, type: 'text' } };
+        }
       }
       return f;
     }));
@@ -219,24 +270,100 @@ export default function AdminDashboard() {
     if (!uploadCategory) return alert('Please select a category first');
     
     setUploading(true);
+    setUploadTotal(stagingFiles.length);
+    setUploadCurrent(0);
+    setUploadProgress(0);
+    setUploadSuccess(0);
+    setUploadFail(0);
+    setTimeRemaining(null);
+
+    const startTime = Date.now();
+
     try {
       let successCount = 0;
       let failCount = 0;
+      let completedCount = 0;
 
-      for (const staged of stagingFiles) {
+      const CONCURRENCY = 10;
+      
+      const compressImage = async (file: File | Blob, maxWidth = 1920): Promise<Blob> => {
+        if (!file.type.startsWith('image/')) return file as Blob;
+        
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            if (width > maxWidth) {
+              height = (maxWidth / width) * height;
+              width = maxWidth;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', 0.85);
+            URL.revokeObjectURL(img.src);
+          };
+          img.src = URL.createObjectURL(file);
+        });
+      };
+      
+      const uploadFile = async (staged: StagedFile) => {
         try {
-          const formData = new FormData();
-          const fileToUpload = staged.editedBlob || staged.originalFile;
-          // If editedBlob exists, we need to pass a filename
-          if (staged.editedBlob) {
-            formData.append('file', staged.editedBlob, staged.originalFile.name);
-          } else {
-            formData.append('file', staged.originalFile);
+          // Optimistic UI: Display the file instantly
+          const tempId = `temp-${staged.id}`;
+          const optimisticProject = {
+            _id: tempId,
+            category: uploadCategory,
+            mediaUrls: [staged.objectUrl],
+            mediaType: staged.originalFile.type.startsWith('video/') ? 'video' : 'image',
+          } as Project;
+          setProjects(prev => [optimisticProject, ...prev]);
+
+          let fileToUpload = staged.editedBlob || staged.originalFile;
+          
+          if (fileToUpload.type.startsWith('image/')) {
+            fileToUpload = await compressImage(fileToUpload);
           }
           
-          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
-          if (!uploadRes.ok) throw new Error('Upload failed');
-          const { url } = await uploadRes.json();
+          // 1. Get Cloudinary Upload Signature
+          const sigPayload: any = {};
+          if (staged.editedBlob) {
+            sigPayload.skipWatermark = true;
+          } else if (staged.watermarkOptions) {
+            sigPayload.customWatermark = staged.watermarkOptions;
+          }
+
+          const sigRes = await fetch('/api/upload/signature', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sigPayload)
+          });
+          
+          if (!sigRes.ok) throw new Error('Signature generation failed');
+          const sigData = await sigRes.json();
+
+          // 2. Upload directly to Cloudinary edge nodes
+          const formData = new FormData();
+          formData.append('file', fileToUpload, staged.originalFile.name);
+          formData.append('api_key', sigData.apiKey);
+          formData.append('timestamp', sigData.timestamp.toString());
+          formData.append('signature', sigData.signature);
+          formData.append('folder', sigData.folder);
+          if (sigData.transformation) {
+            formData.append('transformation', sigData.transformation);
+          }
+
+          const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${sigData.cloudName}/auto/upload`, {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!uploadRes.ok) throw new Error('Cloudinary upload failed');
+          const uploadData = await uploadRes.json();
+          const url = uploadData.secure_url;
 
           const projectRes = await fetch('/api/projects', {
             method: 'POST',
@@ -254,11 +381,39 @@ export default function AdminDashboard() {
             throw new Error(`Project creation failed: ${errorData.error}`);
           }
           
+          const newProjectData = await projectRes.json();
+          // Replace optimistic temp project with real DB project
+          setProjects(prev => prev.map(p => p._id === tempId ? newProjectData.project : p));
+          
           successCount++;
+          setUploadSuccess(successCount);
         } catch (err) {
           console.error('Upload failed for file', staged.originalFile.name, err);
           failCount++;
+          setUploadFail(failCount);
+        } finally {
+          completedCount++;
+          setUploadCurrent(completedCount);
+          setUploadProgress(Math.round((completedCount / stagingFiles.length) * 100));
+          
+          const elapsed = Date.now() - startTime;
+          const timePerFile = elapsed / completedCount;
+          const remainingFiles = stagingFiles.length - completedCount;
+          const remainingMs = remainingFiles * timePerFile;
+          
+          if (remainingMs > 60000) {
+            setTimeRemaining(`${Math.round(remainingMs / 60000)}m remaining`);
+          } else if (remainingMs > 1000) {
+            setTimeRemaining(`${Math.round(remainingMs / 1000)}s remaining`);
+          } else {
+            setTimeRemaining('Almost done...');
+          }
         }
+      };
+
+      for (let i = 0; i < stagingFiles.length; i += CONCURRENCY) {
+        const chunk = stagingFiles.slice(i, i + CONCURRENCY);
+        await Promise.all(chunk.map(uploadFile));
       }
 
       setIsAdding(false);
@@ -266,12 +421,28 @@ export default function AdminDashboard() {
       fetchProjects();
       
       if (failCount > 0) {
-        alert(`Finished: ${successCount} uploaded successfully, ${failCount} failed.`);
+        setErrorModal({
+          isOpen: true,
+          title: 'Upload Partially Completed',
+          message: `${successCount} items uploaded successfully, but ${failCount} items failed to upload.`,
+          details: 'Check your internet connection and ensure all files are valid formats. The failed files have been left in the staging area.'
+        });
       }
     } catch (error: any) {
-      alert(`Failed: ${error.message}`);
+      setErrorModal({
+        isOpen: true,
+        title: 'Upload Failed',
+        message: 'A critical error occurred during the upload process.',
+        details: error.message || String(error)
+      });
     } finally {
       setUploading(false);
+      setTimeout(() => {
+        setUploadTotal(0);
+        setUploadCurrent(0);
+        setUploadProgress(0);
+        setTimeRemaining(null);
+      }, 2000);
     }
   };
 
@@ -289,7 +460,7 @@ export default function AdminDashboard() {
   };
 
   // Filter Projects by Search Client-side
-  const displayedProjects = projects.filter(p => p.category.toLowerCase().includes(searchQuery.toLowerCase()));
+  const displayedProjects = projects.filter(p => (p.category || '').toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -339,7 +510,7 @@ export default function AdminDashboard() {
                         <select 
                           value={uploadCategory || ''} 
                           onChange={(e) => setUploadCategory(e.target.value)} 
-                          className="w-full px-4 py-3 rounded-xl border border-white/10 bg-surface text-sm appearance-none text-foreground [&>option]:bg-black [&>option]:text-white"
+                          className="w-full px-4 py-3 rounded-xl appearance-none bg-[#0a0a0a] border border-gold-400/20 text-foreground hover:border-gold-400/40 focus:outline-none focus:border-gold-400/60 focus:ring-1 focus:ring-gold-400/30 transition-all bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%23AA7C11%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px_16px] bg-[position:right_12px_center] bg-no-repeat pr-10 text-sm [&>option]:bg-[#0a0a0a] [&>option]:text-white shadow-inner"
                         >
                           {categories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                           {categories.length === 0 && <option value="" disabled>No categories available</option>}
@@ -370,29 +541,56 @@ export default function AdminDashboard() {
                     <label className="relative cursor-pointer w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-surface/50 hover:bg-white/5 transition-colors">
                       <ImageIcon className="w-5 h-5 text-gold-400" />
                       <span className="text-sm">Select Photos & Videos</span>
-                      <input type="file" multiple onChange={handleFilesSelected} className="hidden" />
+                      <input type="file" accept="image/*,video/*" multiple onChange={handleFilesSelected} className="hidden" />
                     </label>
                     
                     <label className="relative cursor-pointer w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/10 bg-surface/50 hover:bg-white/5 transition-colors">
                       <Plus className="w-5 h-5 text-gold-400" />
                       <span className="text-sm">Select Entire Folder</span>
-                      <input type="file" {...{webkitdirectory: "true"}} onChange={handleFilesSelected} className="hidden" />
+                      <input type="file" accept="image/*,video/*" {...{webkitdirectory: "true"}} onChange={handleFilesSelected} className="hidden" />
                     </label>
+
+                    {stagingFiles.length > 0 && (
+                      <div className="flex flex-col gap-3 mt-4">
+                        {uploading && uploadTotal > 0 && (
+                          <div className="bg-surface rounded-xl p-5 border border-white/10 flex flex-col gap-3 shadow-lg">
+                            <div className="flex justify-between items-end text-sm">
+                              <div>
+                                <p className="font-bold text-gold-400">Uploading {uploadCurrent} of {uploadTotal} files</p>
+                                <p className="text-xs text-foreground/50 mt-1">{timeRemaining || 'Calculating...'}</p>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold text-lg">{uploadProgress}%</span>
+                              </div>
+                            </div>
+                            <div className="h-2 w-full bg-black rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-gold-600 to-gold-400 transition-all duration-300 relative" 
+                                style={{ width: `${uploadProgress}%` }}
+                              >
+                                <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                              </div>
+                            </div>
+                            <div className="flex justify-between text-xs pt-1">
+                              <span className="text-green-400">{uploadSuccess} Successful</span>
+                              {uploadFail > 0 && <span className="text-red-400">{uploadFail} Failed</span>}
+                            </div>
+                          </div>
+                        )}
+                        <button onClick={handleUploadAll} disabled={uploading} className="btn-gold py-3 rounded-xl text-sm font-bold tracking-wider uppercase flex justify-center items-center gap-2">
+                          {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                          {uploading ? 'Processing Uploads...' : `Upload ${stagingFiles.length} File${stagingFiles.length > 1 ? 's' : ''}`}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                
-                {stagingFiles.length > 0 && (
-                  <button onClick={handleUploadAll} disabled={uploading} className="mt-auto btn-gold py-3 rounded-xl text-sm font-bold tracking-wider uppercase flex justify-center items-center gap-2">
-                    {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {uploading ? 'Uploading...' : `Upload ${stagingFiles.length} File${stagingFiles.length > 1 ? 's' : ''}`}
-                  </button>
-                )}
               </div>
 
               {/* Step 3 & 4: Staging Preview Area */}
               <div className="w-full md:w-2/3 border border-white/10 rounded-2xl bg-black/50 p-6 flex flex-col">
                 <h3 className="font-serif text-xl font-bold text-white mb-1">3. Staging Area & Preview</h3>
-                <p className="text-xs text-white/50 mb-4">Click any photo to open the visual editor (Crop, Rotate, Watermark). Files here are not saved yet.</p>
+                <p className="text-xs text-white/50 mb-4">Click any photo to open the visual editor (Crop, Rotate). Files here are not saved yet. Watermarks are automatically applied on upload.</p>
                 
                 {stagingFiles.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-white/20">
@@ -409,12 +607,25 @@ export default function AdminDashboard() {
                           ) : (
                             <img src={file.objectUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Staged" />
                           )}
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                            {!file.originalFile.type.startsWith('video/') && (
-                              <button onClick={() => setEditingStagedFile(file)} className="p-2 bg-gold-400 text-black rounded-full hover:scale-110 transition-transform">
-                                <Crop className="w-4 h-4" />
-                              </button>
-                            )}
+                          
+                          {/* CSS Overlay for Watermark Preview */}
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
+                            <span 
+                              className="font-bold drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]"
+                              style={{ 
+                                color: file.watermarkOptions?.color || '#ffffff', 
+                                fontSize: `${(file.watermarkOptions?.size || 30) * 0.6}px`, 
+                                opacity: file.watermarkOptions?.opacity || 0.7 
+                              }}
+                            >
+                              {file.watermarkOptions?.text || 'SLNS 9480038144'}
+                            </span>
+                          </div>
+
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 z-20">
+                            <button onClick={() => setEditingStagedFile(file)} className="p-2 bg-gold-400 text-black rounded-full hover:scale-110 transition-transform">
+                              <Crop className="w-4 h-4" />
+                            </button>
                             <button onClick={() => removeStagedFile(file.id)} className="p-2 bg-red-500 text-white rounded-full hover:scale-110 transition-transform">
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -438,14 +649,13 @@ export default function AdminDashboard() {
 
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 p-4 rounded-2xl bg-surface/50 border border-white/5">
-        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+        <div className="flex flex-wrap md:flex-nowrap items-center gap-4 w-full md:w-auto">
           {/* Multi-select actions */}
           {selectedIds.length > 0 ? (
-            <div className="flex items-center gap-2 animate-in fade-in flex-wrap">
-              <span className="text-xs text-gold-400 font-bold px-2">{selectedIds.length} Selected</span>
-              <button onClick={() => setSelectedIds(displayedProjects.map(p => p._id))} className="text-xs btn-outline-gold px-2 py-1.5 rounded-lg whitespace-nowrap">Select All</button>
+            <div className="flex flex-wrap items-center gap-2 animate-in fade-in w-full md:w-auto">
+              <span className="text-xs text-gold-400 font-bold px-2 whitespace-nowrap">{selectedIds.length} Selected</span>
               <button onClick={handleBulkDelete} className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/40"><Trash2 className="w-4 h-4"/></button>
-              <select onChange={(e) => { if(e.target.value) handleBulkUpdate({ category: e.target.value })}} className="px-3 py-1.5 rounded-lg border border-white/10 bg-black text-xs text-foreground [&>option]:bg-black [&>option]:text-white">
+              <select onChange={(e) => { if(e.target.value) handleBulkUpdate({ category: e.target.value })}} className="px-3 py-1.5 rounded-lg border border-gold-400/20 bg-[#0a0a0a] text-xs text-foreground appearance-none hover:border-gold-400/40 focus:outline-none focus:border-gold-400/60 transition-all bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%23AA7C11%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[length:14px_14px] bg-[position:right_8px_center] bg-no-repeat pr-7 [&>option]:bg-[#0a0a0a] [&>option]:text-white flex-1 md:flex-none">
                 <option value="">Move to...</option>
                 {categories.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
               </select>
@@ -453,14 +663,25 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <>
-              <button onClick={() => setSelectedIds(displayedProjects.map(p => p._id))} className="text-xs btn-outline-gold px-3 py-2 rounded-xl whitespace-nowrap">Select All</button>
-              <div className="relative w-full md:w-64">
+              <button 
+                onClick={() => {
+                  if (selectedIds.length === displayedProjects.length && displayedProjects.length > 0) {
+                    setSelectedIds([]);
+                  } else {
+                    setSelectedIds(displayedProjects.map(p => p._id));
+                  }
+                }}
+                className="btn-outline-gold px-3 py-2 rounded-xl text-xs flex items-center justify-center gap-2 border-white/10 whitespace-nowrap w-full md:w-auto"
+              >
+                <CheckSquare className="w-4 h-4"/> Select All
+              </button>
+              <div className="relative w-full md:w-64 flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40" />
                 <input type="text" placeholder="Search categories..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 rounded-xl border border-white/10 bg-black text-sm" />
               </div>
-              <div className="flex items-center gap-2 border-l border-white/10 pl-4">
+              <div className="flex items-center gap-2 md:border-l border-white/10 md:pl-4 w-full md:w-auto">
                 <Filter className="w-4 h-4 text-foreground/40" />
-                <select value={filterCategory || 'All'} onChange={(e) => setFilterCategory(e.target.value)} className="bg-transparent text-sm border-none outline-none cursor-pointer text-foreground [&>option]:bg-black [&>option]:text-white">
+                <select value={filterCategory || 'All'} onChange={(e) => setFilterCategory(e.target.value)} className="appearance-none bg-[#0a0a0a] text-sm border border-gold-400/20 rounded-lg px-3 py-1.5 outline-none cursor-pointer text-foreground hover:border-gold-400/40 focus:border-gold-400/60 transition-all bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%23AA7C11%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[length:14px_14px] bg-[position:right_8px_center] bg-no-repeat pr-8 [&>option]:bg-[#0a0a0a] [&>option]:text-white flex-1 md:flex-none shadow-inner">
                   <option value="All">All Categories</option>
                   {categories.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
                 </select>
@@ -477,7 +698,7 @@ export default function AdminDashboard() {
         <div className="columns-1 sm:columns-2 lg:columns-4 gap-6 space-y-6">
           {displayedProjects.map((project) => (
             <motion.div
-              key={project._id}
+              key={project._id || Math.random().toString(36)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className={`group relative rounded-2xl overflow-hidden border ${selectedIds.includes(project._id) ? 'border-gold-400 shadow-[0_0_15px_rgba(170,124,17,0.3)]' : 'border-white/5'} bg-surface break-inside-avoid cursor-pointer aspect-auto`}
@@ -485,10 +706,10 @@ export default function AdminDashboard() {
               onDoubleClick={(e) => { e.stopPropagation(); setPreviewProject(project); }}
             >
               {/* Render Image or Video */}
-              {project.mediaUrls[0]?.match(/\.(mp4|webm|ogg)$/i) ? (
-                <video src={project.mediaUrls[0]} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105" muted playsInline />
+              {project.mediaUrls?.[0]?.match(/\.(mp4|webm|ogg)$/i) ? (
+                <video src={project.mediaUrls[0]} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105 pointer-events-none" controlsList="nodownload" onContextMenu={(e) => e.preventDefault()} muted playsInline />
               ) : (
-                <img src={project.mediaUrls[0]} alt={project.title || 'SLNS Decoration Project'} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105" />
+                <img src={project.mediaUrls?.[0] || ''} alt={project.title || 'SLNS Decoration Project'} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
               )}
               
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -528,6 +749,7 @@ export default function AdminDashboard() {
       {editingStagedFile && (
         <ImageEditor 
           imageUrl={editingStagedFile.objectUrl}
+          isVideo={editingStagedFile.originalFile.type.startsWith('video/')}
           onSave={saveEditedStagedFile}
           onCancel={() => setEditingStagedFile(null)}
         />
@@ -543,10 +765,10 @@ export default function AdminDashboard() {
                 <X className="w-5 h-5"/>
               </button>
 
-              {editingProject.mediaUrls[0]?.match(/\.(mp4|webm|ogg)$/i) ? (
+              {editingProject.mediaUrls?.[0]?.match(/\.(mp4|webm|ogg)$/i) ? (
                 <>
                   <div className="md:w-2/3 relative bg-black flex items-center justify-center h-full">
-                    <video src={editingProject.mediaUrls[0]} className="w-full h-full object-contain" controls />
+                    <video src={editingProject.mediaUrls[0]} className="w-full h-full object-contain" controls controlsList="nodownload" onContextMenu={(e) => e.preventDefault()} />
                   </div>
                   <div className="md:w-1/3 p-6 md:p-8 flex flex-col bg-surface border-l border-white/10">
                     <h3 className="font-serif text-2xl font-bold mb-6">Manage Video</h3>
@@ -576,7 +798,7 @@ export default function AdminDashboard() {
                 </>
               ) : (
                 <ImageEditor 
-                  imageUrl={editingProject.mediaUrls[0]}
+                  imageUrl={editingProject.mediaUrls?.[0] || ''}
                   isModal={false}
                   onSave={async (blob) => {
                     // Save new edited image
@@ -584,13 +806,14 @@ export default function AdminDashboard() {
                     try {
                       const formData = new FormData();
                       formData.append('file', blob, 'edited.jpg');
+                      formData.append('skipWatermark', 'true');
                       const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
                       const { url } = await uploadRes.json();
                       
                       await handleUpdateProject(editingProject._id, { ...editingProject, mediaUrls: [url] });
                       setEditingProject(null);
-                    } catch (e) {
-                      alert('Failed to save edited image');
+                    } catch (e: any) {
+                      setErrorModal({ isOpen: true, title: 'Edit Failed', message: 'Failed to save the edited image.', details: e.message || String(e) });
                     } finally {
                       setUploading(false);
                     }
@@ -603,7 +826,7 @@ export default function AdminDashboard() {
                         <select 
                           value={editingProject?.category || ''} 
                           onChange={(e) => setEditingProject({...editingProject, category: e.target.value})}
-                          className="w-full px-3 py-2 rounded-lg bg-black border border-white/10 text-sm text-foreground [&>option]:bg-black [&>option]:text-white"
+                          className="w-full px-3 py-2 rounded-lg appearance-none bg-[#0a0a0a] border border-gold-400/20 text-foreground hover:border-gold-400/40 focus:outline-none focus:border-gold-400/60 focus:ring-1 focus:ring-gold-400/30 transition-all bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M6%209L12%2015L18%209%22%20stroke%3D%22%23AA7C11%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[length:14px_14px] bg-[position:right_8px_center] bg-no-repeat pr-8 text-sm [&>option]:bg-[#0a0a0a] [&>option]:text-white shadow-inner"
                         >
                           {categories.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
                         </select>
@@ -640,10 +863,10 @@ export default function AdminDashboard() {
               className="relative max-w-full max-h-full cursor-default"
               onClick={e => e.stopPropagation()}
             >
-              {previewProject.mediaUrls[0]?.match(/\.(mp4|webm|ogg)$/i) ? (
-                <video src={previewProject.mediaUrls[0]} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" controls autoPlay />
+              {previewProject.mediaUrls?.[0]?.match(/\.(mp4|webm|ogg)$/i) ? (
+                <video src={previewProject.mediaUrls[0]} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" controls controlsList="nodownload" onContextMenu={(e) => e.preventDefault()} autoPlay />
               ) : (
-                <img src={previewProject.mediaUrls[0]} alt={previewProject.title || 'SLNS Decoration Project'} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" />
+                <img src={previewProject.mediaUrls?.[0] || ''} alt={previewProject.title || 'SLNS Decoration Project'} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" />
               )}
             </motion.div>
           </div>
@@ -670,21 +893,36 @@ export default function AdminDashboard() {
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={() => setConfirmDialog(null)}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-white/70 hover:bg-white/5 hover:text-white transition-colors text-sm font-medium"
+                  disabled={isProcessingAction}
+                  className="px-5 py-2.5 rounded-xl border border-white/10 text-white/70 hover:bg-white/5 hover:text-white transition-colors text-sm font-medium disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={confirmDialog.onConfirm}
-                  className="px-5 py-2.5 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white transition-colors text-sm font-bold"
+                  onClick={async () => {
+                    setIsProcessingAction(true);
+                    await confirmDialog.onConfirm();
+                    setIsProcessingAction(false);
+                  }}
+                  disabled={isProcessingAction}
+                  className="px-5 py-2.5 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500 hover:text-white transition-colors text-sm font-bold flex items-center justify-center min-w-[100px]"
                 >
-                  Delete
+                  {isProcessingAction ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete'}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Global Error Modal */}
+      <ErrorModal
+        isOpen={!!errorModal?.isOpen}
+        title={errorModal?.title}
+        message={errorModal?.message || ''}
+        details={errorModal?.details}
+        onClose={() => setErrorModal(null)}
+      />
     </div>
   );
 }

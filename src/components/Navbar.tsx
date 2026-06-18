@@ -53,7 +53,7 @@ export default function Navbar() {
               SLNS
             </span>
             <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.3em] -mt-0.5 text-gold-400/60">
-              Since 1986
+              Since 1984
             </span>
           </Link>
 
@@ -146,7 +146,7 @@ export default function Navbar() {
                 SLNS
               </span>
               <p className="text-[10px] uppercase tracking-[0.3em] text-gold-400/50 mt-1">
-                Since 1986
+                Since 1984
               </p>
             </motion.div>
 

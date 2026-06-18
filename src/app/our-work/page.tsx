@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronLeft, ChevronRight, Calendar, Phone, MessageCircle } from 'lucide-react';
 import ScrollReveal from '@/components/ScrollReveal';
+import SignatureStamp from '@/components/SignatureStamp';
 
 // Dynamic categories will be loaded from DB
 
@@ -81,7 +82,13 @@ export default function OurWorkPage() {
       {/* Hero Banner */}
       <section className="pt-28 pb-16 sm:pt-36 sm:pb-20 bg-background relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(170,124,17,0.06)_0%,transparent_60%)]" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
+        
+        {/* Floating Stamp */}
+        <div className="absolute top-24 right-4 sm:top-32 sm:right-10 lg:right-20 pointer-events-none opacity-30 sm:opacity-40 hover:opacity-100 transition-opacity duration-700 z-20">
+          <SignatureStamp className="w-24 h-24 sm:w-32 sm:h-32" />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-30">
           <ScrollReveal>
             <span className="font-sans text-xs font-bold tracking-[0.3em] text-gold-400/80 uppercase">
               Portfolio
@@ -99,7 +106,7 @@ export default function OurWorkPage() {
       {/* Category Filter */}
       <section className="sticky top-[60px] z-30 bg-background/80 backdrop-blur-lg border-b border-white/5 py-4">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <div className="flex flex-wrap justify-center gap-2 pb-2">
             {categories.map((cat) => (
               <button
                 key={cat}
@@ -148,13 +155,17 @@ export default function OurWorkPage() {
                       loop
                       muted
                       playsInline
-                      className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-110"
+                      controlsList="nodownload"
+                      onContextMenu={(e) => e.preventDefault()}
+                      className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none"
                     />
                   ) : (
                     <img
                       src={project.imageUrl}
                       alt={project.title || 'SLNS Decoration Project'}
                       className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-110"
+                      loading="lazy"
+                      decoding="async"
                     />
                   )}
 
@@ -262,6 +273,8 @@ export default function OurWorkPage() {
                   autoPlay
                   controls
                   playsInline
+                  controlsList="nodownload"
+                  onContextMenu={(e) => e.preventDefault()}
                   className="w-full h-full object-contain rounded-xl"
                 />
               ) : (

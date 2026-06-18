@@ -14,7 +14,7 @@ export default function Footer() {
                 SLNS
               </span>
               <span className="text-[9px] uppercase tracking-[0.3em] -mt-0.5 text-gold-400/50">
-                Since 1986
+                Since 1984
               </span>
             </Link>
             <p className="text-sm text-white/40 leading-relaxed mt-2">

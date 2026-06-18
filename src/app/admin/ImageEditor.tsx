@@ -5,33 +5,56 @@ import { X, Save, RotateCcw, RotateCw } from 'lucide-react';
 
 interface ImageEditorProps {
   imageUrl: string;
-  onSave: (blob: Blob) => void;
+  onSave: (blob: Blob | null, watermarkOpts?: any) => void;
   onCancel: () => void;
   isModal?: boolean;
   extraTools?: React.ReactNode;
+  isVideo?: boolean;
 }
 
-export default function ImageEditor({ imageUrl, onSave, onCancel, isModal = true, extraTools }: ImageEditorProps) {
+export default function ImageEditor({ imageUrl, onSave, onCancel, isModal = true, extraTools, isVideo = false }: ImageEditorProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
 
-  // Watermark State
-  const [addWatermark, setAddWatermark] = useState(false);
-  const [watermarkText, setWatermarkText] = useState('SLNS Since 1986');
+  // Watermark State (Always enabled)
+  const [watermarkText, setWatermarkText] = useState('SLNS 9480038144');
   const [watermarkColor, setWatermarkColor] = useState('#ffffff');
-  const [watermarkSize, setWatermarkSize] = useState(48);
-  const [watermarkOpacity, setWatermarkOpacity] = useState(0.8);
-  const [watermarkPos, setWatermarkPos] = useState({ x: 50, y: 50 });
+  const [watermarkSize, setWatermarkSize] = useState(30);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(0.7);
+  const [watermarkPos, setWatermarkPos] = useState({ x: 0, y: 0 });
+  const [isCentered, setIsCentered] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggableNodeRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (containerRef.current && draggableNodeRef.current && !isCentered) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const nodeRect = draggableNodeRef.current.getBoundingClientRect();
+        
+        setWatermarkPos({
+          x: (containerRect.width - nodeRect.width) / 2,
+          y: (containerRect.height - nodeRect.height) / 2,
+        });
+        setIsCentered(true);
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [isCentered]);
 
   const onCropComplete = useCallback((croppedArea: any, croppedAreaPixels: any) => {
     setCroppedAreaPixels(croppedAreaPixels);
   }, []);
 
   const handleSave = async () => {
+    if (isVideo) {
+      // For videos, we don't manipulate the blob. Return null and the watermark options.
+      onSave(null, { text: watermarkText, color: watermarkColor, size: watermarkSize, opacity: watermarkOpacity, position: 'center' });
+      return;
+    }
+
     if (!croppedAreaPixels) return;
 
     try {
@@ -64,8 +87,8 @@ export default function ImageEditor({ imageUrl, onSave, onCancel, isModal = true
         Math.round(0 - safeArea / 2 + image.height * 0.5 - croppedAreaPixels.y)
       );
 
-      // Draw Watermark
-      if (addWatermark && watermarkText && containerRef.current) {
+      // Draw Watermark (Always enabled)
+      if (watermarkText && containerRef.current) {
         const containerRect = containerRef.current.getBoundingClientRect();
         
         // Calculate relative position based on the draggable position vs the container
@@ -110,26 +133,30 @@ export default function ImageEditor({ imageUrl, onSave, onCancel, isModal = true
       <div className="flex-1 relative flex items-center justify-center p-4">
         {/* We use a wrapper with fixed aspect to match the crop area or we let Cropper fill the container */}
         <div ref={containerRef} className="relative w-full h-full max-w-4xl max-h-[80vh] bg-[#111] overflow-hidden">
-          {/* Cropper layer */}
-          <div className="absolute inset-0 z-0">
-            <Cropper
-              image={imageUrl}
-              crop={crop}
-              zoom={zoom}
-              rotation={rotation}
-              aspect={undefined} // Free crop
-              objectFit="contain"
-              onCropChange={setCrop}
-              onRotationChange={setRotation}
-              onZoomChange={setZoom}
-              onCropComplete={onCropComplete}
-              style={{ containerStyle: { background: 'transparent' } }}
-            />
+          {/* Editor layer */}
+          <div className="absolute inset-0 z-0 flex items-center justify-center">
+            {isVideo ? (
+              <video src={imageUrl} controls className="max-w-full max-h-full object-contain" />
+            ) : (
+              <Cropper
+                image={imageUrl}
+                crop={crop}
+                zoom={zoom}
+                rotation={rotation}
+                aspect={undefined} // Free crop
+                objectFit="contain"
+                onCropChange={setCrop}
+                onRotationChange={setRotation}
+                onZoomChange={setZoom}
+                onCropComplete={onCropComplete}
+                style={{ containerStyle: { background: 'transparent' } }}
+              />
+            )}
           </div>
           
           {/* Draggable Watermark Layer - Absolutely positioned over Cropper, pointer-events none on wrapper, auto on children */}
           <div className="absolute inset-0 z-10 pointer-events-none overflow-visible">
-            {addWatermark && (
+            {watermarkText && (
               <Draggable
                 nodeRef={draggableNodeRef}
                 position={watermarkPos}
@@ -170,66 +197,43 @@ export default function ImageEditor({ imageUrl, onSave, onCancel, isModal = true
 
         {extraTools}
 
-        {/* Rotate Tool */}
-        <div className="space-y-3">
-          <label className="text-xs uppercase tracking-wider text-gold-400">Rotation</label>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setRotation(r => r - 90)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg"><RotateCcw className="w-4 h-4"/></button>
-            <input type="range" min="0" max="360" value={rotation} onChange={e => setRotation(Number(e.target.value))} className="flex-1 accent-gold-400" />
-            <button onClick={() => setRotation(r => r + 90)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg"><RotateCw className="w-4 h-4"/></button>
-          </div>
-        </div>
+        {!isVideo && (
+          <>
+            {/* Rotate Tool */}
+            <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wider text-gold-400">Rotation</label>
+              <div className="flex items-center gap-4">
+                <button onClick={() => setRotation(r => r - 90)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg"><RotateCcw className="w-4 h-4"/></button>
+                <input type="range" min="0" max="360" value={rotation} onChange={e => setRotation(Number(e.target.value))} className="flex-1 accent-gold-400" />
+                <button onClick={() => setRotation(r => r + 90)} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg"><RotateCw className="w-4 h-4"/></button>
+              </div>
+            </div>
 
-        {/* Zoom Tool */}
-        <div className="space-y-3">
-          <label className="text-xs uppercase tracking-wider text-gold-400">Zoom</label>
-          <input type="range" min="1" max="3" step="0.1" value={zoom} onChange={e => setZoom(Number(e.target.value))} className="w-full accent-gold-400" />
-        </div>
+            {/* Zoom Tool */}
+            <div className="space-y-3">
+              <label className="text-xs uppercase tracking-wider text-gold-400">Zoom</label>
+              <input type="range" min="1" max="3" step="0.1" value={zoom} onChange={e => setZoom(Number(e.target.value))} className="w-full accent-gold-400" />
+            </div>
+          </>
+        )}
 
         {/* Watermark Tool */}
-        <div className="space-y-4 pt-4 border-t border-white/10">
-          <div className="flex items-center gap-2">
-            <input 
-              type="checkbox" 
-              id="watermark-toggle"
-              checked={addWatermark} 
-              onChange={e => setAddWatermark(e.target.checked)}
-              className="w-4 h-4 accent-gold-400"
-            />
-            <label htmlFor="watermark-toggle" className="text-xs uppercase tracking-wider text-gold-400 cursor-pointer">
-              Add Watermark
-            </label>
-          </div>
-          
-          {addWatermark && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-              <input 
-                type="text" 
-                value={watermarkText} 
-                onChange={e => setWatermarkText(e.target.value)} 
-                placeholder="Watermark text..."
-                className="w-full px-3 py-2 bg-black border border-white/10 rounded-lg text-sm"
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-white/50">Color</label>
-                  <input type="color" value={watermarkColor} onChange={e => setWatermarkColor(e.target.value)} className="w-full h-8 bg-black rounded cursor-pointer" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-white/50">Size</label>
-                  <input type="number" value={watermarkSize} onChange={e => setWatermarkSize(Number(e.target.value))} className="w-full px-3 py-1.5 bg-black border border-white/10 rounded-lg text-sm" />
-                </div>
+        <div className="space-y-4">
+          <label className="text-xs uppercase tracking-wider text-gold-400 font-bold">Watermark Options</label>
+          <div className="space-y-3">
+            <input type="text" value={watermarkText} onChange={e => setWatermarkText(e.target.value)} className="w-full px-3 py-2 rounded-lg bg-black border border-white/10 text-sm text-white" placeholder="Watermark text" />
+            <div className="flex gap-2">
+              <input type="color" value={watermarkColor} onChange={e => setWatermarkColor(e.target.value)} className="w-10 h-10 rounded-lg cursor-pointer bg-black border border-white/10 p-1" />
+              <div className="flex-1 space-y-1">
+                <label className="text-[10px] text-white/50">Size: {watermarkSize}px</label>
+                <input type="range" min="10" max="100" value={watermarkSize} onChange={e => setWatermarkSize(Number(e.target.value))} className="w-full accent-gold-400" />
               </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] text-white/50">Opacity: {Math.round(watermarkOpacity * 100)}%</label>
-                <input type="range" min="0" max="1" step="0.1" value={watermarkOpacity} onChange={e => setWatermarkOpacity(Number(e.target.value))} className="w-full accent-gold-400" />
-              </div>
-              
-              <p className="text-[10px] text-gold-400/50 italic">Drag the text directly on the image to position it.</p>
             </div>
-          )}
+            <div className="space-y-1">
+              <label className="text-[10px] text-white/50">Opacity: {Math.round(watermarkOpacity * 100)}%</label>
+              <input type="range" min="0.1" max="1" step="0.1" value={watermarkOpacity} onChange={e => setWatermarkOpacity(Number(e.target.value))} className="w-full accent-gold-400" />
+            </div>
+          </div>
         </div>
 
         <button onClick={handleSave} className="mt-auto btn-gold py-3 rounded-xl flex items-center justify-center gap-2 text-sm">
