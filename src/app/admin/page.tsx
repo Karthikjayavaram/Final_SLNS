@@ -27,6 +27,58 @@ type StagedFile = {
   objectUrl: string;
   editedBlob?: Blob;
   watermarkOptions?: any;
+  originalSize: number;
+  compressedSize?: number;
+  status?: 'pending' | 'compressing' | 'uploading' | 'success' | 'error';
+  progress?: number;
+};
+
+const compressImage = async (file: File | Blob, maxWidth = 1920): Promise<Blob> => {
+  if (!file.type.startsWith('image/')) return file as Blob;
+  
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      if (width > maxWidth) {
+        height = (maxWidth / width) * height;
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      let isTransparent = false;
+      if (['image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+        try {
+          const imageData = ctx.getImageData(0, 0, width, height).data;
+          // Check alpha channel (every 4th byte)
+          for (let i = 3; i < imageData.length; i += 4) {
+            if (imageData[i] < 255) {
+              isTransparent = true;
+              break;
+            }
+          }
+        } catch (e) {
+          // Default to preserving if we can't read pixel data (e.g., CORS, though local Blob shouldn't trigger this)
+          isTransparent = true;
+        }
+      }
+
+      const mimeType = isTransparent ? 'image/webp' : 'image/jpeg';
+      canvas.toBlob((blob) => resolve(blob || file), mimeType, 0.85);
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
 };
 
 export default function AdminDashboard() {
@@ -56,6 +108,7 @@ export default function AdminDashboard() {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [stagingFiles, setStagingFiles] = useState<StagedFile[]>([]);
   const [editingStagedFile, setEditingStagedFile] = useState<StagedFile | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Modals
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -220,33 +273,62 @@ export default function AdminDashboard() {
   };
 
   // Staging & Upload Logic
+  const processFiles = async (files: File[]) => {
+    const newFiles = files.filter(f => !stagingFiles.some(p => p.originalFile.name === f.name && p.originalSize === f.size));
+    if (newFiles.length === 0) return;
+
+    const initialStaged = newFiles.map(f => ({
+      id: Math.random().toString(36).substr(2, 9),
+      originalFile: f,
+      objectUrl: URL.createObjectURL(f),
+      originalSize: f.size,
+      status: 'compressing' as const
+    }));
+
+    setStagingFiles(prev => [...prev, ...initialStaged]);
+
+    for (const staged of initialStaged) {
+      if (staged.originalFile.type.startsWith('image/')) {
+        try {
+          const compressed = await compressImage(staged.originalFile);
+          setStagingFiles(prev => prev.map(p => {
+            if (p.id === staged.id) {
+              return { 
+                ...p, 
+                editedBlob: compressed, 
+                compressedSize: compressed.size, 
+                status: 'pending' 
+              };
+            }
+            return p;
+          }));
+        } catch (e) {
+          setStagingFiles(prev => prev.map(p => p.id === staged.id ? { ...p, status: 'pending' } : p));
+        }
+      } else {
+        setStagingFiles(prev => prev.map(p => p.id === staged.id ? { ...p, status: 'pending' } : p));
+      }
+    }
+  };
+
   const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-    const files = Array.from(e.target.files);
-    
-    setStagingFiles(prev => {
-      // Filter out files that already exist (same name and size)
-      const newFiles = files.filter(f => !prev.some(p => p.originalFile.name === f.name && p.originalFile.size === f.size));
-      
-      if (newFiles.length === 0) {
-        // Optional: all files were duplicates
-        return prev;
-      }
-
-      const newStaged = newFiles.map(f => ({
-        id: Math.random().toString(36).substr(2, 9),
-        originalFile: f,
-        objectUrl: URL.createObjectURL(f)
-      }));
-      
-      return [...prev, ...newStaged];
-    });
-    
+    processFiles(Array.from(e.target.files));
     e.target.value = ''; // Reset input
   };
 
   const removeStagedFile = (id: string) => {
-    setStagingFiles(prev => prev.filter(f => f.id !== id));
+    setStagingFiles(prev => {
+      const file = prev.find(f => f.id === id);
+      if (file) URL.revokeObjectURL(file.objectUrl);
+      return prev.filter(f => f.id !== id);
+    });
+  };
+
+  const handleCancelUpload = () => {
+    stagingFiles.forEach(f => URL.revokeObjectURL(f.objectUrl));
+    setStagingFiles([]);
+    setIsAdding(false);
   };
 
   const saveEditedStagedFile = (blob: Blob | null, watermarkOpts?: any) => {
@@ -284,31 +366,9 @@ export default function AdminDashboard() {
       let failCount = 0;
       let completedCount = 0;
 
-      const CONCURRENCY = 10;
+      const pendingFiles = stagingFiles.filter(f => f.status !== 'success');
       
-      const compressImage = async (file: File | Blob, maxWidth = 1920): Promise<Blob> => {
-        if (!file.type.startsWith('image/')) return file as Blob;
-        
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
-            if (width > maxWidth) {
-              height = (maxWidth / width) * height;
-              width = maxWidth;
-            }
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx?.drawImage(img, 0, 0, width, height);
-            canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', 0.85);
-            URL.revokeObjectURL(img.src);
-          };
-          img.src = URL.createObjectURL(file);
-        });
-      };
+      const CONCURRENCY = 10;
       
       const uploadFile = async (staged: StagedFile) => {
         try {
@@ -323,10 +383,6 @@ export default function AdminDashboard() {
           setProjects(prev => [optimisticProject, ...prev]);
 
           let fileToUpload = staged.editedBlob || staged.originalFile;
-          
-          if (fileToUpload.type.startsWith('image/')) {
-            fileToUpload = await compressImage(fileToUpload);
-          }
           
           // 1. Get Cloudinary Upload Signature
           const sigPayload: any = {};
@@ -345,24 +401,41 @@ export default function AdminDashboard() {
           if (!sigRes.ok) throw new Error('Signature generation failed');
           const sigData = await sigRes.json();
 
-          // 2. Upload directly to Cloudinary edge nodes
-          const formData = new FormData();
-          formData.append('file', fileToUpload, staged.originalFile.name);
-          formData.append('api_key', sigData.apiKey);
-          formData.append('timestamp', sigData.timestamp.toString());
-          formData.append('signature', sigData.signature);
-          formData.append('folder', sigData.folder);
-          if (sigData.transformation) {
-            formData.append('transformation', sigData.transformation);
-          }
-
-          const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${sigData.cloudName}/auto/upload`, {
-            method: 'POST',
-            body: formData
+          // 2. Upload directly to Cloudinary edge nodes via XHR for progress tracking
+          const uploadData = await new Promise<any>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `https://api.cloudinary.com/v1_1/${sigData.cloudName}/auto/upload`);
+            
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                setStagingFiles(prev => prev.map(f => f.id === staged.id ? { ...f, progress: percentComplete, status: 'uploading' } : f));
+              }
+            };
+            
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(JSON.parse(xhr.responseText));
+              } else {
+                reject(new Error(`Cloudinary upload failed: ${xhr.statusText}`));
+              }
+            };
+            
+            xhr.onerror = () => reject(new Error('Network error during upload'));
+            
+            const formData = new FormData();
+            formData.append('file', fileToUpload, staged.originalFile.name);
+            formData.append('api_key', sigData.apiKey);
+            formData.append('timestamp', sigData.timestamp.toString());
+            formData.append('signature', sigData.signature);
+            formData.append('folder', sigData.folder);
+            if (sigData.transformation) {
+              formData.append('transformation', sigData.transformation);
+            }
+            
+            xhr.send(formData);
           });
-
-          if (!uploadRes.ok) throw new Error('Cloudinary upload failed');
-          const uploadData = await uploadRes.json();
+          
           const url = uploadData.secure_url;
 
           const projectRes = await fetch('/api/projects', {
@@ -385,12 +458,13 @@ export default function AdminDashboard() {
           // Replace optimistic temp project with real DB project
           setProjects(prev => prev.map(p => p._id === tempId ? newProjectData.project : p));
           
-          successCount++;
           setUploadSuccess(successCount);
+          setStagingFiles(prev => prev.map(f => f.id === staged.id ? { ...f, status: 'success', progress: 100 } : f));
         } catch (err) {
           console.error('Upload failed for file', staged.originalFile.name, err);
           failCount++;
           setUploadFail(failCount);
+          setStagingFiles(prev => prev.map(f => f.id === staged.id ? { ...f, status: 'error' } : f));
         } finally {
           completedCount++;
           setUploadCurrent(completedCount);
@@ -411,22 +485,24 @@ export default function AdminDashboard() {
         }
       };
 
-      for (let i = 0; i < stagingFiles.length; i += CONCURRENCY) {
-        const chunk = stagingFiles.slice(i, i + CONCURRENCY);
+      for (let i = 0; i < pendingFiles.length; i += CONCURRENCY) {
+        const chunk = pendingFiles.slice(i, i + CONCURRENCY);
         await Promise.all(chunk.map(uploadFile));
       }
 
-      setIsAdding(false);
-      setStagingFiles([]);
       fetchProjects();
       
       if (failCount > 0) {
+        setStagingFiles(prev => prev.filter(f => f.status === 'error' || f.status === 'pending'));
         setErrorModal({
           isOpen: true,
           title: 'Upload Partially Completed',
           message: `${successCount} items uploaded successfully, but ${failCount} items failed to upload.`,
           details: 'Check your internet connection and ensure all files are valid formats. The failed files have been left in the staging area.'
         });
+      } else {
+        setIsAdding(false);
+        setStagingFiles([]);
       }
     } catch (error: any) {
       setErrorModal({
@@ -471,7 +547,7 @@ export default function AdminDashboard() {
           <p className="text-foreground/40 mt-1 text-sm">Upload, edit, and organize your portfolio</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={() => { setIsAdding(!isAdding); setStagingFiles([]); }} className="btn-gold px-5 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 font-bold tracking-wider">
+          <button onClick={() => { if (isAdding) handleCancelUpload(); else setIsAdding(true); }} className="btn-gold px-5 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2 font-bold tracking-wider">
             {isAdding ? 'Cancel Upload' : <><Upload className="w-4 h-4" /> Upload Photos & Videos</>}
           </button>
           <button onClick={handleLogout} className="btn-outline-gold border-white/10 text-white/60 hover:text-white px-4 py-2.5 rounded-xl text-xs uppercase flex items-center gap-2">
@@ -588,7 +664,18 @@ export default function AdminDashboard() {
               </div>
 
               {/* Step 3 & 4: Staging Preview Area */}
-              <div className="w-full md:w-2/3 border border-white/10 rounded-2xl bg-black/50 p-6 flex flex-col">
+              <div 
+                className={`w-full md:w-2/3 border rounded-2xl bg-black/50 p-6 flex flex-col transition-colors ${isDragging ? 'border-gold-400 bg-gold-400/10' : 'border-white/10'}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  if (e.dataTransfer.files) {
+                    processFiles(Array.from(e.dataTransfer.files));
+                  }
+                }}
+              >
                 <h3 className="font-serif text-xl font-bold text-white mb-1">3. Staging Area & Preview</h3>
                 <p className="text-xs text-white/50 mb-4">Click any photo to open the visual editor (Crop, Rotate). Files here are not saved yet. Watermarks are automatically applied on upload.</p>
                 
@@ -608,6 +695,28 @@ export default function AdminDashboard() {
                             <img src={file.objectUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="Staged" />
                           )}
                           
+                          {/* File Optimization & Status Badges */}
+                          <div className="absolute top-2 left-2 z-30 flex flex-col gap-1 pointer-events-none">
+                            {file.status === 'compressing' && (
+                              <span className="text-[10px] bg-blue-500/80 text-white px-2 py-0.5 rounded-full backdrop-blur-md font-bold">Compressing...</span>
+                            )}
+                            {file.status === 'uploading' && (
+                              <span className="text-[10px] bg-gold-500/80 text-black px-2 py-0.5 rounded-full backdrop-blur-md font-bold">Uploading {file.progress}%</span>
+                            )}
+                            {file.status === 'success' && (
+                              <span className="text-[10px] bg-green-500/80 text-white px-2 py-0.5 rounded-full backdrop-blur-md font-bold">Success</span>
+                            )}
+                            {file.status === 'error' && (
+                              <span className="text-[10px] bg-red-500/80 text-white px-2 py-0.5 rounded-full backdrop-blur-md font-bold">Failed</span>
+                            )}
+                            {file.compressedSize && file.compressedSize < file.originalSize && (
+                              <span className="text-[10px] bg-black/60 text-white px-2 py-0.5 rounded-full backdrop-blur-md shadow-sm">
+                                {Math.round(file.originalSize / 1024)}KB → {Math.round(file.compressedSize / 1024)}KB
+                                <span className="text-green-400 ml-1">(-{Math.round((1 - file.compressedSize / file.originalSize) * 100)}%)</span>
+                              </span>
+                            )}
+                          </div>
+
                           {/* CSS Overlay for Watermark Preview */}
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 overflow-hidden">
                             <span 

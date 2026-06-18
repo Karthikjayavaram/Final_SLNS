@@ -2,12 +2,13 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, User, KeyRound } from 'lucide-react';
+import { Lock, User, KeyRound, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function AdminLoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -78,13 +79,23 @@ export default function AdminLoginPage() {
             <label className="font-sans text-xs font-bold uppercase tracking-[0.15em] text-foreground/50 flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5 text-gold-500" /> Password
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3.5 rounded-xl border font-sans text-sm focus:outline-none focus:ring-1 focus:ring-gold-500 bg-surface text-foreground placeholder:text-foreground/20 transition-colors border-white/10 hover:border-white/20 focus:border-gold-500/50"
-              required
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3.5 pr-12 rounded-xl border font-sans text-sm focus:outline-none focus:ring-1 focus:ring-gold-500 bg-surface text-foreground placeholder:text-foreground/20 transition-colors border-white/10 hover:border-white/20 focus:border-gold-500/50"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground transition-colors"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
           <button
