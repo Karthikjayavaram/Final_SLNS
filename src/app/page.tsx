@@ -8,8 +8,17 @@ import TestimonialSlider from '@/components/TestimonialSlider';
 import ScrollReveal from '@/components/ScrollReveal';
 import SignatureStamp from '@/components/SignatureStamp';
 
+import { Metadata } from 'next';
 import dbConnect from '@/lib/db';
 import Project from '@/models/Project';
+
+export const metadata: Metadata = {
+  title: 'Premium Event Decorators in Ballari',
+  description: 'Experience the magic of SLNS Decorators. We create luxurious wedding stages, floral mandaps, and themed birthday parties tailored to your dream celebration.',
+  alternates: {
+    canonical: '/',
+  }
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -61,8 +70,41 @@ async function getFeaturedProjects() {
 
 export default async function HomePage() {
   const featuredProjects = await getFeaturedProjects();
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "name": "Sri Lakshmi Narashimha Suppliers & Decorators (SLNS Decorators)",
+    "image": "https://www.slnsdecorators.com/logo.png",
+    "@id": "https://www.slnsdecorators.com",
+    "url": "https://www.slnsdecorators.com",
+    "telephone": "+919480038144",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "Siruguppa",
+      "addressLocality": "Ballari",
+      "addressRegion": "KA",
+      "postalCode": "583121",
+      "addressCountry": "IN"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 15.6293,
+      "longitude": 76.8973
+    },
+    "sameAs": [
+      "https://www.instagram.com/raghu.nath.391",
+      "https://facebook.com",
+      "https://youtube.com"
+    ]
+  };
+
   return (
     <div className="flex flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Hero Section */}
       <HeroSection />
 

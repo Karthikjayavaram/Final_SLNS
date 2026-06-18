@@ -19,6 +19,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.slnsdecorators.com'),
   title: {
     default: 'Sri Lakshmi Narashimha Suppliers & Decorators (SLNS Decorators)',
     template: '%s | SLNS Decorators',
@@ -39,6 +40,22 @@ export const metadata: Metadata = {
   creator: 'SLNS Decorators',
   publisher: 'SLNS Decorators',
   robots: 'index, follow',
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: 'Sri Lakshmi Narashimha Suppliers & Decorators (SLNS Decorators)',
+    description: 'SLNS Decorators creates luxurious wedding stages, floral mandaps, themed birthday parties, engagement ceremonies, and premium event decorations in Siruguppa, Ballari.',
+    url: '/',
+    siteName: 'SLNS Decorators',
+    locale: 'en_IN',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Sri Lakshmi Narashimha Suppliers & Decorators (SLNS Decorators)',
+    description: 'SLNS Decorators creates luxurious wedding stages, floral mandaps, themed birthday parties, engagement ceremonies, and premium event decorations in Siruguppa, Ballari.',
+  },
 };
 
 export const viewport: Viewport = {
