@@ -26,6 +26,7 @@ type StagedFile = {
   originalFile: File;
   objectUrl: string;
   editedBlob?: Blob;
+  hasManualEdit?: boolean;
   watermarkOptions?: any;
   originalSize: number;
   compressedSize?: number;
@@ -33,50 +34,77 @@ type StagedFile = {
   progress?: number;
 };
 
+const getOptimizedUrl = (url: string, width = 800) => {
+  if (!url || !url.includes('cloudinary.com')) return url;
+  const wm = `l_text:Arial_200_bold:SLNS%209480038144,co_white,o_50/c_scale,w_0.9,fl_relative/fl_layer_apply,g_center`;
+  return url.replace('/upload/', `/upload/f_auto,q_auto,w_${width},c_limit/${wm}/`);
+};
+
 const compressImage = async (file: File | Blob, maxWidth = 1920): Promise<Blob> => {
   if (!file.type.startsWith('image/')) return file as Blob;
   
   return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      if (width > maxWidth) {
-        height = (maxWidth / width) * height;
-        width = maxWidth;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) {
-        resolve(file);
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      let isTransparent = false;
-      if (['image/png', 'image/webp', 'image/gif'].includes(file.type)) {
-        try {
-          const imageData = ctx.getImageData(0, 0, width, height).data;
-          // Check alpha channel (every 4th byte)
-          for (let i = 3; i < imageData.length; i += 4) {
-            if (imageData[i] < 255) {
-              isTransparent = true;
-              break;
-            }
-          }
-        } catch (e) {
-          // Default to preserving if we can't read pixel data (e.g., CORS, though local Blob shouldn't trigger this)
-          isTransparent = true;
-        }
-      }
+    // Timeout failsafe to prevent compression from hanging indefinitely
+    const timeoutId = setTimeout(() => resolve(file as Blob), 60000);
 
-      const mimeType = isTransparent ? 'image/webp' : 'image/jpeg';
-      canvas.toBlob((blob) => resolve(blob || file), mimeType, 0.85);
-      URL.revokeObjectURL(img.src);
+    const img = new Image();
+    img.onload = async () => {
+      clearTimeout(timeoutId);
+      
+      // Yield to the main thread so React can render "Compressing..." badges before heavy processing
+      await new Promise(r => setTimeout(r, 20));
+      
+      try {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = (maxWidth / width) * height;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) {
+          resolve(file as Blob);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Yield again before potentially heavy pixel iteration
+        await new Promise(r => setTimeout(r, 10));
+
+        let isTransparent = false;
+        if (['image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+          try {
+            const imageData = ctx.getImageData(0, 0, width, height).data;
+            // Check alpha channel (every 4th byte)
+            for (let i = 3; i < imageData.length; i += 4) {
+              if (imageData[i] < 255) {
+                isTransparent = true;
+                break;
+              }
+            }
+          } catch (e) {
+            isTransparent = true;
+          }
+        }
+
+        // Final yield before toBlob which is also heavy
+        await new Promise(r => setTimeout(r, 10));
+
+        const mimeType = isTransparent ? 'image/webp' : 'image/jpeg';
+        canvas.toBlob((blob) => resolve(blob || file as Blob), mimeType, 0.85);
+      } catch (err) {
+        resolve(file as Blob);
+      } finally {
+        URL.revokeObjectURL(img.src);
+      }
     };
-    img.onerror = () => resolve(file);
+    img.onerror = () => {
+      clearTimeout(timeoutId);
+      resolve(file as Blob);
+    };
     img.src = URL.createObjectURL(file);
   });
 };
@@ -106,6 +134,8 @@ export default function AdminDashboard() {
   const [uploadCategory, setUploadCategory] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [isEditingCategoryName, setIsEditingCategoryName] = useState(false);
+  const [editCategoryNameText, setEditCategoryNameText] = useState('');
   const [stagingFiles, setStagingFiles] = useState<StagedFile[]>([]);
   const [editingStagedFile, setEditingStagedFile] = useState<StagedFile | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -124,6 +154,11 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchCategories();
     fetchProjects();
+    
+    // Request notification permission for upload completion alerts
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
   }, [filterCategory]);
 
   const fetchCategories = async () => {
@@ -179,14 +214,40 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleEditCategoryNameSubmit = async () => {
+    if (!editCategoryNameText) return;
+    const selectedCat = categories.find(c => c.name === uploadCategory);
+    if (!selectedCat) return;
+
+    const res = await fetch('/api/styles', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: selectedCat._id, name: editCategoryNameText })
+    });
+    
+    if (res.ok) {
+      const { style } = await res.json();
+      // Update locally
+      setCategories(prev => prev.map(c => c._id === selectedCat._id ? style : c));
+      setUploadCategory(style.name);
+      
+      // Update projects locally that had the old category
+      setProjects(prev => prev.map(p => p.category === selectedCat.name ? { ...p, category: style.name } : p));
+      
+      setIsEditingCategoryName(false);
+      setEditCategoryNameText('');
+    } else {
+      console.error('Failed to update category');
+    }
+  };
+
   const handleDeleteCategory = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setConfirmDialog({
       isOpen: true,
       message: 'Delete this category? ALL photos and videos inside this category will also be permanently deleted.',
-      onConfirm: async () => {
+      onConfirm: () => {
         const categoryName = categories.find(c => c._id === id)?.name;
-        await fetch(`/api/styles?id=${id}`, { method: 'DELETE' });
         
         // Optimistically remove category
         setCategories(prev => {
@@ -202,9 +263,10 @@ export default function AdminDashboard() {
           setProjects(prev => prev.filter(p => p.category !== categoryName));
         }
 
-        fetchCategories();
-        fetchProjects(); // refresh projects to ensure accurate state
         setConfirmDialog(null);
+
+        // Fire and forget API call
+        fetch(`/api/styles?id=${id}`, { method: 'DELETE' }).catch(console.error);
       }
     });
   };
@@ -218,23 +280,19 @@ export default function AdminDashboard() {
     setConfirmDialog({
       isOpen: true,
       message: `Delete ${selectedIds.length} projects?`,
-      onConfirm: async () => {
-        try {
-          const validIds = selectedIds.filter(id => !id.startsWith('temp-'));
-          if (validIds.length > 0) {
-            await fetch('/api/projects/bulk', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'delete', ids: validIds }),
-            });
-          }
-          setProjects(prev => prev.filter(p => !selectedIds.includes(p._id)));
-          setSelectedIds([]);
-          fetchProjects();
-        } catch (e) {
-          console.error(e);
-        }
+      onConfirm: () => {
+        const validIds = selectedIds.filter(id => !id.startsWith('temp-'));
+        setProjects(prev => prev.filter(p => !selectedIds.includes(p._id)));
+        setSelectedIds([]);
         setConfirmDialog(null);
+
+        if (validIds.length > 0) {
+          fetch('/api/projects/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete', ids: validIds }),
+          }).catch(e => console.error(e));
+        }
       }
     });
   };
@@ -257,58 +315,77 @@ export default function AdminDashboard() {
     setConfirmDialog({
       isOpen: true,
       message: 'Are you sure you want to delete this media?',
-      onConfirm: async () => {
-        try {
-          setProjects(prev => prev.filter(p => p._id !== id));
-          if (!id.startsWith('temp-')) {
-            await fetch(`/api/projects?id=${id}`, { method: 'DELETE' });
-          }
-          fetchProjects();
-        } catch (error) {
-          console.error('Delete failed', error);
-        }
+      onConfirm: () => {
+        setProjects(prev => prev.filter(p => p._id !== id));
         setConfirmDialog(null);
+        if (!id.startsWith('temp-')) {
+          fetch(`/api/projects?id=${id}`, { method: 'DELETE' }).catch(error => console.error('Delete failed', error));
+        }
       }
     });
   };
 
   // Staging & Upload Logic
   const processFiles = async (files: File[]) => {
-    const newFiles = files.filter(f => !stagingFiles.some(p => p.originalFile.name === f.name && p.originalSize === f.size));
-    if (newFiles.length === 0) return;
+    setStagingFiles(prev => {
+      const newFiles = files.filter(f => !prev.some(p => p.originalFile.name === f.name && p.originalSize === f.size));
+      if (newFiles.length === 0) return prev;
 
-    const initialStaged = newFiles.map(f => ({
-      id: Math.random().toString(36).substr(2, 9),
-      originalFile: f,
-      objectUrl: URL.createObjectURL(f),
-      originalSize: f.size,
-      status: 'compressing' as const
-    }));
+      const initialStaged = newFiles.map(f => ({
+        id: Math.random().toString(36).substr(2, 9),
+        originalFile: f,
+        objectUrl: URL.createObjectURL(f),
+        originalSize: f.size,
+        status: 'compressing' as const
+      }));
 
-    setStagingFiles(prev => [...prev, ...initialStaged]);
-
-    for (const staged of initialStaged) {
-      if (staged.originalFile.type.startsWith('image/')) {
-        try {
-          const compressed = await compressImage(staged.originalFile);
-          setStagingFiles(prev => prev.map(p => {
-            if (p.id === staged.id) {
-              return { 
-                ...p, 
-                editedBlob: compressed, 
-                compressedSize: compressed.size, 
-                status: 'pending' 
-              };
-            }
-            return p;
-          }));
-        } catch (e) {
-          setStagingFiles(prev => prev.map(p => p.id === staged.id ? { ...p, status: 'pending' } : p));
+      // Process compressions with concurrency limit of 3 to prevent browser freezing
+      const COMPRESSION_CONCURRENCY = 3;
+      
+      const processItem = async (staged: typeof initialStaged[0]) => {
+        if (staged.originalFile.type.startsWith('image/')) {
+          try {
+            const compressed = await compressImage(staged.originalFile);
+            setStagingFiles(current => current.map(p => {
+              if (p.id === staged.id) {
+                return { 
+                  ...p, 
+                  editedBlob: compressed, 
+                  compressedSize: compressed.size, 
+                  status: 'pending' 
+                };
+              }
+              return p;
+            }));
+          } catch (e) {
+            setStagingFiles(current => current.map(p => p.id === staged.id ? { ...p, status: 'pending' } : p));
+          }
+        } else {
+          setStagingFiles(current => current.map(p => p.id === staged.id ? { ...p, status: 'pending' } : p));
         }
-      } else {
-        setStagingFiles(prev => prev.map(p => p.id === staged.id ? { ...p, status: 'pending' } : p));
-      }
-    }
+      };
+
+      const processQueue = async () => {
+        const queue = [...initialStaged];
+        const active = new Set();
+        
+        while (queue.length > 0 || active.size > 0) {
+          if (queue.length > 0 && active.size < COMPRESSION_CONCURRENCY) {
+            const item = queue.shift()!;
+            const promise = processItem(item).finally(() => active.delete(promise));
+            active.add(promise);
+          } else {
+            // Wait for at least one active promise to resolve before taking more from queue
+            await Promise.race(active);
+          }
+        }
+      };
+      
+      // Start queue
+      processQueue();
+
+      return [...prev, ...initialStaged];
+    });
   };
 
   const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -337,7 +414,7 @@ export default function AdminDashboard() {
       if (f.id === editingStagedFile.id) {
         if (blob) {
           if (f.editedBlob) URL.revokeObjectURL(f.objectUrl); // cleanup previous edit if any
-          return { ...f, objectUrl: URL.createObjectURL(blob), editedBlob: blob };
+          return { ...f, objectUrl: URL.createObjectURL(blob), editedBlob: blob, hasManualEdit: true };
         } else if (watermarkOpts) {
           return { ...f, watermarkOptions: { ...watermarkOpts, type: 'text' } };
         }
@@ -368,7 +445,7 @@ export default function AdminDashboard() {
 
       const pendingFiles = stagingFiles.filter(f => f.status !== 'success');
       
-      const CONCURRENCY = 10;
+      const CONCURRENCY = 3;
       
       const uploadFile = async (staged: StagedFile) => {
         try {
@@ -386,7 +463,7 @@ export default function AdminDashboard() {
           
           // 1. Get Cloudinary Upload Signature
           const sigPayload: any = {};
-          if (staged.editedBlob) {
+          if (staged.hasManualEdit) {
             sigPayload.skipWatermark = true;
           } else if (staged.watermarkOptions) {
             sigPayload.customWatermark = staged.watermarkOptions;
@@ -458,6 +535,7 @@ export default function AdminDashboard() {
           // Replace optimistic temp project with real DB project
           setProjects(prev => prev.map(p => p._id === tempId ? newProjectData.project : p));
           
+          successCount++;
           setUploadSuccess(successCount);
           setStagingFiles(prev => prev.map(f => f.id === staged.id ? { ...f, status: 'success', progress: 100 } : f));
         } catch (err) {
@@ -492,17 +570,40 @@ export default function AdminDashboard() {
 
       fetchProjects();
       
+      const notificationTitle = failCount > 0 ? 'Upload Completed with Errors' : 'Upload Complete';
+      const notificationBody = failCount > 0 ? `${successCount} files uploaded, ${failCount} failed.` : `${successCount} files uploaded successfully.`;
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(notificationTitle, { body: notificationBody });
+      }
+      
       if (failCount > 0) {
         setStagingFiles(prev => prev.filter(f => f.status === 'error' || f.status === 'pending'));
+        // Cleanup URLs for successful ones
+        stagingFiles.forEach(f => {
+          if (f.status === 'success') URL.revokeObjectURL(f.objectUrl);
+        });
         setErrorModal({
           isOpen: true,
-          title: 'Upload Partially Completed',
-          message: `${successCount} items uploaded successfully, but ${failCount} items failed to upload.`,
+          title: notificationTitle,
+          message: notificationBody,
           details: 'Check your internet connection and ensure all files are valid formats. The failed files have been left in the staging area.'
         });
       } else {
+        // Cleanup all URLs
+        stagingFiles.forEach(f => URL.revokeObjectURL(f.objectUrl));
         setIsAdding(false);
         setStagingFiles([]);
+
+        // Show success modal fallback if notifications are denied/unsupported
+        if (!('Notification' in window) || Notification.permission !== 'granted') {
+          setErrorModal({
+            isOpen: true,
+            title: notificationTitle,
+            message: notificationBody,
+            details: 'All files have been saved to the database and are now live.'
+          });
+        }
       }
     } catch (error: any) {
       setErrorModal({
@@ -580,6 +681,19 @@ export default function AdminDashboard() {
                       <button onClick={handleCreateCategory} className="btn-gold px-3 rounded-xl text-xs">Save</button>
                       <button onClick={() => setIsCreatingCategory(false)} className="text-white/50 hover:text-white px-2"><X className="w-4 h-4"/></button>
                     </div>
+                  ) : isEditingCategoryName ? (
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={editCategoryNameText} 
+                        onChange={(e) => setEditCategoryNameText(e.target.value)} 
+                        placeholder="Rename category" 
+                        className="flex-1 px-3 py-2 rounded-xl border border-white/10 bg-black text-sm" 
+                        autoFocus
+                      />
+                      <button onClick={handleEditCategoryNameSubmit} className="btn-gold px-3 rounded-xl text-xs">Save</button>
+                      <button onClick={() => setIsEditingCategoryName(false)} className="text-white/50 hover:text-white px-2"><X className="w-4 h-4"/></button>
+                    </div>
                   ) : (
                     <div className="flex gap-2">
                       <div className="relative flex-1">
@@ -595,6 +709,17 @@ export default function AdminDashboard() {
                       <div className="flex gap-1">
                         <button onClick={() => setIsCreatingCategory(true)} className="btn-outline-gold px-3 rounded-xl flex items-center justify-center" title="New Category">
                           <Plus className="w-4 h-4"/>
+                        </button>
+                        <button 
+                          onClick={() => {
+                            if (!uploadCategory) return;
+                            setEditCategoryNameText(uploadCategory);
+                            setIsEditingCategoryName(true);
+                          }} 
+                          className="btn-outline-gold px-3 rounded-xl flex items-center justify-center" 
+                          title="Rename Selected Category"
+                        >
+                          <Edit className="w-4 h-4"/>
                         </button>
                         <button 
                           onClick={(e) => {
@@ -653,10 +778,15 @@ export default function AdminDashboard() {
                             </div>
                           </div>
                         )}
-                        <button onClick={handleUploadAll} disabled={uploading} className="btn-gold py-3 rounded-xl text-sm font-bold tracking-wider uppercase flex justify-center items-center gap-2">
-                          {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                          {uploading ? 'Processing Uploads...' : `Upload ${stagingFiles.length} File${stagingFiles.length > 1 ? 's' : ''}`}
-                        </button>
+                        {(() => {
+                          const isProcessing = stagingFiles.some(f => f.status === 'compressing');
+                          return (
+                            <button onClick={handleUploadAll} disabled={uploading || isProcessing} className="btn-gold py-3 rounded-xl text-sm font-bold tracking-wider uppercase flex justify-center items-center gap-2">
+                              {(uploading || isProcessing) && <Loader2 className="w-4 h-4 animate-spin" />}
+                              {uploading ? 'Processing Uploads...' : isProcessing ? 'Compressing Files...' : `Upload ${stagingFiles.length} File${stagingFiles.length > 1 ? 's' : ''}`}
+                            </button>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -816,12 +946,12 @@ export default function AdminDashboard() {
             >
               {/* Render Image or Video */}
               {project.mediaUrls?.[0]?.match(/\.(mp4|webm|ogg)$/i) ? (
-                <video src={project.mediaUrls[0]} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105 pointer-events-none" controlsList="nodownload" onContextMenu={(e) => e.preventDefault()} muted playsInline />
+                <video src={getOptimizedUrl(project.mediaUrls[0], 800)} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105 pointer-events-none" controlsList="nodownload" onContextMenu={(e) => e.preventDefault()} muted playsInline />
               ) : (
-                <img src={project.mediaUrls?.[0] || ''} alt={project.title || 'SLNS Decoration Project'} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
+                <img src={getOptimizedUrl(project.mediaUrls?.[0] || '', 800)} alt={project.title || 'SLNS Decoration Project'} className="w-full h-auto object-cover transition-all duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
               )}
               
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40 opacity-100 transition-opacity" />
               
               {/* Top Left Checks */}
               <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
@@ -836,7 +966,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Bottom Info & Edit Button */}
-              <div className="absolute bottom-0 left-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-end">
+              <div className="absolute bottom-0 left-0 right-0 p-4 opacity-100 transition-opacity flex justify-between items-end">
                 <div>
                   <div className="inline-block px-2 py-1 mb-1 rounded bg-white/10 backdrop-blur-md text-[10px] font-bold tracking-wider text-gold-400 uppercase">
                     {project.category}

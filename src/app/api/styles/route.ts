@@ -46,6 +46,39 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export async function PUT(req: NextRequest) {
+  try {
+    const admin = getAdminFromRequest(req);
+    if (!admin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    await dbConnect();
+    const body = await req.json();
+    
+    if (!body.id || !body.name) {
+      return NextResponse.json({ error: 'Style ID and new name are required' }, { status: 400 });
+    }
+
+    const style = await EventStyle.findById(body.id);
+    if (!style) {
+      return NextResponse.json({ error: 'Style not found' }, { status: 404 });
+    }
+
+    const oldName = style.name;
+    style.name = body.name;
+    await style.save();
+
+    // Update all projects that had the old category name
+    await Project.updateMany({ category: oldName }, { $set: { category: body.name } });
+
+    return NextResponse.json({ success: true, style }, { status: 200 });
+  } catch (error) {
+    console.error('Failed to update style:', error);
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const admin = getAdminFromRequest(req);

@@ -50,10 +50,7 @@ export async function POST(req: NextRequest) {
       
       const colorFormatted = colorVal.replace('#', 'rgb:'); 
       
-      let tStr = `co_${colorFormatted},l_text:Arial_${sizeVal}_bold:${encodedText},g_${watermark.position || 'center'},o_${opacityVal}`;
-      if (!isCenter) {
-        tStr += ',x_30,y_30';
-      }
+      let tStr = `l_text:Arial_200_bold:${encodedText},co_${colorFormatted},o_${opacityVal}/c_scale,w_0.5,fl_relative/fl_layer_apply,g_${watermark.position || 'center'}`;
       transformationStr = tStr;
     }
 

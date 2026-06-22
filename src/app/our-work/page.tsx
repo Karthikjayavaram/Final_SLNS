@@ -10,7 +10,8 @@ import SignatureStamp from '@/components/SignatureStamp';
 
 const getOptimizedUrl = (url: string, width = 800) => {
   if (!url || !url.includes('cloudinary.com')) return url;
-  return url.replace('/upload/', `/upload/f_auto,q_auto,w_${width},c_limit/`);
+  const wm = `l_text:Arial_200_bold:SLNS%209480038144,co_white,o_50/c_scale,w_0.9,fl_relative/fl_layer_apply,g_center`;
+  return url.replace('/upload/', `/upload/f_auto,q_auto,w_${width},c_limit/${wm}/`);
 };
 
 const getVideoPoster = (url: string, width = 800) => {
@@ -90,6 +91,13 @@ const ProjectCard = React.memo(({ project, index, openLightbox, innerRef }: any)
 
       {/* Overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-90 transition-opacity duration-500 pointer-events-none" />
+
+      {/* Category Text at Bottom */}
+      <div className="absolute bottom-4 left-4 z-20 pointer-events-none">
+        <span className="inline-block px-3 py-1 bg-white/10 backdrop-blur-md rounded border border-white/10 text-gold-400 text-[10px] font-bold uppercase tracking-wider">
+          {project.category}
+        </span>
+      </div>
     </motion.div>
   );
 });
@@ -134,7 +142,11 @@ export default function OurWorkPage() {
         if (isNewCategory) {
           setProjects(mapped);
         } else {
-          setProjects(prev => [...prev, ...mapped]);
+          setProjects(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const uniqueMapped = mapped.filter((p: any) => !existingIds.has(p.id));
+            return [...prev, ...uniqueMapped];
+          });
         }
         
         setHasMore(data.length === LIMIT);
