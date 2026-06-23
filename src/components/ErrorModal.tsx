@@ -2,18 +2,21 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertCircle, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, CheckCircle, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ErrorModalProps {
   isOpen: boolean;
+  type?: 'error' | 'success';
   title?: string;
   message: string;
   details?: string;
   onClose: () => void;
 }
 
-export default function ErrorModal({ isOpen, title = 'An Error Occurred', message, details, onClose }: ErrorModalProps) {
+export default function ErrorModal({ isOpen, type = 'error', title, message, details, onClose }: ErrorModalProps) {
   const [showDetails, setShowDetails] = React.useState(false);
+  const isError = type === 'error';
+  const displayTitle = title || (isError ? 'An Error Occurred' : 'Success');
 
   return (
     <AnimatePresence>
@@ -28,17 +31,17 @@ export default function ErrorModal({ isOpen, title = 'An Error Occurred', messag
             initial={{ scale: 0.95, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.95, opacity: 0, y: 20 }}
-            className="bg-[#111] border border-red-500/20 rounded-2xl p-6 max-w-lg w-full shadow-2xl relative overflow-hidden"
+            className={`bg-[#111] border ${isError ? 'border-red-500/20' : 'border-green-500/20'} rounded-2xl p-6 max-w-lg w-full shadow-2xl relative overflow-hidden`}
           >
-            {/* Top Red Bar */}
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 to-red-400" />
+            {/* Top Bar */}
+            <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${isError ? 'from-red-600 to-red-400' : 'from-green-600 to-green-400'}`} />
 
             <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-3 text-red-400">
-                <div className="p-2 bg-red-500/10 rounded-full">
-                  <AlertCircle className="w-6 h-6" />
+              <div className={`flex items-center gap-3 ${isError ? 'text-red-400' : 'text-green-400'}`}>
+                <div className={`p-2 ${isError ? 'bg-red-500/10' : 'bg-green-500/10'} rounded-full`}>
+                  {isError ? <AlertCircle className="w-6 h-6" /> : <CheckCircle className="w-6 h-6" />}
                 </div>
-                <h3 className="text-xl font-serif text-white">{title}</h3>
+                <h3 className="text-xl font-serif text-white">{displayTitle}</h3>
               </div>
               <button
                 onClick={onClose}
@@ -69,7 +72,7 @@ export default function ErrorModal({ isOpen, title = 'An Error Occurred', messag
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden mt-3"
                     >
-                      <div className="bg-black border border-white/10 rounded-xl p-4 text-xs font-mono text-red-300/80 max-h-48 overflow-y-auto">
+                      <div className={`bg-black border border-white/10 rounded-xl p-4 text-xs font-mono max-h-48 overflow-y-auto ${isError ? 'text-red-300/80' : 'text-green-300/80'}`}>
                         {details}
                       </div>
                     </motion.div>
@@ -83,7 +86,7 @@ export default function ErrorModal({ isOpen, title = 'An Error Occurred', messag
                 onClick={onClose}
                 className="px-6 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors text-sm font-bold"
               >
-                Dismiss
+                {isError ? 'Dismiss' : 'Awesome'}
               </button>
             </div>
           </motion.div>

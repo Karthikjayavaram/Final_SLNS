@@ -149,16 +149,13 @@ export default function AdminDashboard() {
     onConfirm: () => Promise<void> | void;
   } | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState(false);
-  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title?: string; message: string; details?: string } | null>(null);
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; type?: 'error' | 'success'; title?: string; message: string; details?: string } | null>(null);
 
   useEffect(() => {
     fetchCategories();
     fetchProjects();
     
-    // Request notification permission for upload completion alerts
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+    // Notification feature removed
   }, [filterCategory]);
 
   const fetchCategories = async () => {
@@ -572,10 +569,6 @@ export default function AdminDashboard() {
       
       const notificationTitle = failCount > 0 ? 'Upload Completed with Errors' : 'Upload Complete';
       const notificationBody = failCount > 0 ? `${successCount} files uploaded, ${failCount} failed.` : `${successCount} files uploaded successfully.`;
-
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(notificationTitle, { body: notificationBody });
-      }
       
       if (failCount > 0) {
         setStagingFiles(prev => prev.filter(f => f.status === 'error' || f.status === 'pending'));
@@ -595,15 +588,14 @@ export default function AdminDashboard() {
         setIsAdding(false);
         setStagingFiles([]);
 
-        // Show success modal fallback if notifications are denied/unsupported
-        if (!('Notification' in window) || Notification.permission !== 'granted') {
-          setErrorModal({
-            isOpen: true,
-            title: notificationTitle,
-            message: notificationBody,
-            details: 'All files have been saved to the database and are now live.'
-          });
-        }
+        // Show success modal
+        setErrorModal({
+          isOpen: true,
+          type: 'success',
+          title: notificationTitle,
+          message: notificationBody,
+          details: 'All files have been saved to the database and are now live.'
+        });
       }
     } catch (error: any) {
       setErrorModal({
@@ -1158,6 +1150,7 @@ export default function AdminDashboard() {
       {/* Global Error Modal */}
       <ErrorModal
         isOpen={!!errorModal?.isOpen}
+        type={errorModal?.type}
         title={errorModal?.title}
         message={errorModal?.message || ''}
         details={errorModal?.details}
